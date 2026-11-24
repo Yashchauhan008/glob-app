@@ -90,7 +90,8 @@ class _CallScreenState extends State<CallScreen> with SingleTickerProviderStateM
     final name = isMe ? 'You' : (p.name.isNotEmpty ? p.name : 'Guest');
     final v = _video(p, screen: false);
     final info = ChatService.I.personById(p.identity);
-    final dynamic rawUrl = isMe ? (Api.user)?['avatar_url'] : (info)?['avatar_url'];
+    final Map<String, dynamic>? who = isMe ? Api.user : info;
+    final dynamic rawUrl = who == null ? null : who['avatar_url'];
     final String? url = rawUrl is String ? rawUrl : null;
     final hand = p.attributes['hand'] == '1';
     return AnimatedContainer(
