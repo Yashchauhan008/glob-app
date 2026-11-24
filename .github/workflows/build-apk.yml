@@ -49,7 +49,7 @@ jobs:
 
       - name: Build release APK
         run: |
-          flutter build apk --release \
+          flutter build apk --release --target-platform android-arm64 \
             --build-name=1.0.${{ github.run_number }} \
             --build-number=${{ github.run_number }} \
             --dart-define=API_URL=https://api.glob.yashchauhan.pro
@@ -63,6 +63,7 @@ jobs:
         run: |
           echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/release.p12"
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          cp build/app/outputs/flutter-apk/app-release.apk glob-debugsigned.apk
           cp build/app/outputs/flutter-apk/app-release.apk unsigned.apk
           # drop any existing (debug) signature, re-align, then sign cleanly with v1+v2+v3
           zip -q -d unsigned.apk 'META-INF/*' || true
@@ -72,13 +73,16 @@ jobs:
             --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
             --out glob.apk aligned.apk
           $BT/apksigner verify -v --print-certs glob.apk | head -12
-          $BT/aapt2 dump badging glob.apk | grep -E "package:|sdkVersion|targetSdk|native-code" || true
+          $BT/aapt2 dump badging glob.apk | grep -E "package:|sdkVersion|targetSdk|native-code|compileSdk" || true
+          $BT/apksigner verify -v --print-certs glob-debugsigned.apk | head -8
           rm -f "$RUNNER_TEMP/release.p12"
 
       - uses: actions/upload-artifact@v4
         with:
           name: glob-apk
-          path: glob.apk
+          path: |
+            glob.apk
+            glob-debugsigned.apk
 
       # Every push to main also publishes a downloadable Release
       - name: Publish release
@@ -86,5 +90,7 @@ jobs:
         with:
           tag_name: build-${{ github.run_number }}
           name: Glob build ${{ github.run_number }}
-          files: glob.apk
+          files: |
+            glob.apk
+            glob-debugsigned.apk
           make_latest: true
