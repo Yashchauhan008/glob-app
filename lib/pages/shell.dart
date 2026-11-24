@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
-import '../call.dart';
+import '../call_service.dart';
+import '../nav.dart';
 import '../chat_service.dart';
 import '../notify.dart';
 import '../push.dart';
@@ -16,7 +17,7 @@ import 'products_tab.dart';
 import 'calendar_tab.dart';
 import 'map_tab.dart';
 import 'qa_tab.dart';
-import 'call_tab.dart';
+import 'call_screen.dart';
 import 'chat_tab.dart';
 import 'conversation_page.dart';
 import 'notifications_page.dart';
@@ -37,8 +38,7 @@ class _Dest {
 }
 
 const _kQa = 7;
-const _kCall = 8;
-const _kChat = 9;
+const _kChat = 8;
 
 class _ShellState extends State<Shell> {
   int _i = 0;
@@ -55,7 +55,6 @@ class _ShellState extends State<Shell> {
         _Dest('Calendar', Icons.event_outlined, () => const CalendarTab()),
         _Dest('Map', Icons.map_outlined, () => const MapTab()),
         _Dest('Q&A', Icons.help_outline, () => const QaTab()),
-        _Dest('Call', Icons.headset_mic_outlined, () => const CallTab()),
         _Dest('Message', Icons.chat_bubble_outline, () => const ChatTab()),
       ];
 
@@ -66,6 +65,7 @@ class _ShellState extends State<Shell> {
     chat.addListener(_r);
     NavIntent.notifier.addListener(_onIntent);
     chat.start();
+    call.init();
     Notify.I.init().then((_) => Notify.I.requestPermission());
     Push.register();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -101,7 +101,7 @@ class _ShellState extends State<Shell> {
     final nav = Navigator.of(context);
     if (team.isNotEmpty && team != Api.teamId) {
       // the notification belongs to another workspace: switch to it, then open it
-      await call.leave();
+      await call.hangUp();
       chat.disconnect();
       await Api.setTeam(team);
       nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => Shell(intent: i)), (_) => false);
@@ -128,7 +128,7 @@ class _ShellState extends State<Shell> {
 
   Future<void> _menu(String v) async {
     final nav = Navigator.of(context);
-    await call.leave();
+    await call.hangUp();
     if (v == 'switch') {
       chat.disconnect();
       await Api.setTeam(null);
@@ -172,9 +172,9 @@ class _ShellState extends State<Shell> {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 16)),
         ),
-        if (call.connected)
+        if (call.inCall)
           GestureDetector(
-            onTap: () => setState(() => _i = _kCall),
+            onTap: () => navKey.currentState?.push(MaterialPageRoute(builder: (_) => const CallScreen())),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -182,7 +182,7 @@ class _ShellState extends State<Shell> {
               child: const Row(children: [
                 Icon(Icons.graphic_eq, size: 16, color: C.dark),
                 SizedBox(width: 6),
-                Text('In call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.dark)),
+                Text('Back to call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.dark)),
               ]),
             ),
           ),

@@ -385,9 +385,28 @@ String whenOf(dynamic iso) {
   return '${d.day} ${m[d.month - 1]}';
 }
 
+/// "missed:voice", "ended:video:125", "declined:voice", "group:video:300:4" -> a short sentence.
+String callText(String body) {
+  final p = body.split(':');
+  final what = p.isNotEmpty ? p[0] : '';
+  final word = p.length > 1 && p[1] == 'video' ? 'video' : 'voice';
+  String dur(int i) {
+    final n = p.length > i ? int.tryParse(p[i]) ?? 0 : 0;
+    return n > 0 ? ' · ${n ~/ 60}:${(n % 60).toString().padLeft(2, '0')}' : '';
+  }
+
+  final cap = '${word[0].toUpperCase()}${word.substring(1)}';
+  if (what == 'missed') return 'Missed $word call';
+  if (what == 'declined') return '$cap call declined';
+  if (what == 'group') return 'Group $word call${dur(2)}${p.length > 3 && p[3].isNotEmpty ? ' · ${p[3]} joined' : ''}';
+  return '$cap call${dur(2)}';
+}
+
 String previewOf(Map? m) {
   if (m == null) return '';
   switch ('${m['kind']}') {
+    case 'call':
+      return '📞 ${callText('${m['body'] ?? ''}')}';
     case 'image':
       return '📷 Photo';
     case 'video':

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../api.dart';
+import '../call_service.dart';
 import '../chat_service.dart';
 import '../theme.dart';
 import 'common.dart';
@@ -52,6 +53,8 @@ class _ConversationPageState extends State<ConversationPage> {
     svc.activeConv = convId;
     _sub = svc.events.listen(_onEvent);
     svc.addListener(_r);
+    CallService.I.addListener(_r);
+    CallService.I.loadOpen();
     _load();
     // when the live connection is down (or just as a safety net) ask the server for what is new
     _poll = Timer.periodic(const Duration(seconds: 5), (_) {
@@ -67,6 +70,7 @@ class _ConversationPageState extends State<ConversationPage> {
     _recTick?.cancel();
     _poll?.cancel();
     svc.removeListener(_r);
+    CallService.I.removeListener(_r);
     _rec.dispose();
     _text.dispose();
     super.dispose();
@@ -394,6 +398,117 @@ class _ConversationPageState extends State<ConversationPage> {
     await _sendFile(path, 'voice-${DateTime.now().millisecondsSinceEpoch}.m4a', durationMs: ms);
   }
 
+  Future<void> _call(String kind) async {
+    final err = await CallService.I.start(scope: 'dm', kind: kind, to: peerId, toName: '${widget.peer!['name']}');
+    if (err != null && mounted) toast(context, err);
+  }
+
+  /// Group call: choose who to ring (everyone, or just some people).
+  void _groupCall() {
+    final members = svc.members;
+    final chosen = <String>{};
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) {
+          final all = members.isNotEmpty && chosen.length == members.length;
+          Future<void> go(String kind) async {
+            Navigator.pop(c);
+            final err = await CallService.I.start(
+                scope: 'group', kind: kind, userIds: all ? null : chosen.toList(), all: all);
+            if (err != null && mounted) toast(context, err);
+          }
+
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+            child: SizedBox(
+              height: MediaQuery.of(c).size.height * 0.62,
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                const Text('Start a group call', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text('Choose who to ring. Anyone else in the workspace can still join from the call banner.',
+                    style: TextStyle(color: c.muted, fontSize: 12.5)),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  tileColor: Colors.transparent,
+                  contentPadding: EdgeInsets.zero,
+                  value: all,
+                  title: const Text('Select everyone', style: TextStyle(fontWeight: FontWeight.w700)),
+                  onChanged: (v) => set(() {
+                    chosen
+                      ..clear()
+                      ..addAll(v == true ? members.map((m) => '${m['id']}') : <String>[]);
+                  }),
+                ),
+                Expanded(
+                  child: ListView(children: [
+                    for (final m in members)
+                      CheckboxListTile(
+                        tileColor: Colors.transparent,
+                        contentPadding: EdgeInsets.zero,
+                        value: chosen.contains('${m['id']}'),
+                        secondary: Avatar(id: '${m['id']}', name: '${m['name']}', url: m['avatar_url'] as String?, size: 38),
+                        title: Text('${m['name']}'),
+                        onChanged: (v) => set(() {
+                          if (v == true) {
+                            chosen.add('${m['id']}');
+                          } else {
+                            chosen.remove('${m['id']}');
+                          }
+                        }),
+                      ),
+                  ]),
+                ),
+                Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                        onPressed: () => go('voice'),
+                        icon: const Icon(Icons.call_rounded),
+                        label: Padding(padding: const EdgeInsets.all(12), child: Text('Voice${chosen.isEmpty ? '' : ' · ${chosen.length}'}'))),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: FilledButton.icon(
+                        onPressed: () => go('video'),
+                        icon: const Icon(Icons.videocam_rounded),
+                        label: Padding(padding: const EdgeInsets.all(12), child: Text('Video${chosen.isEmpty ? '' : ' · ${chosen.length}'}'))),
+                  ),
+                ]),
+              ]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _callBanner() {
+    final calls = CallService.I.openGroupCalls;
+    if (dm || calls.isEmpty || CallService.I.inCall) return const SizedBox.shrink();
+    final c = calls.first;
+    final n = ((c['participants'] as List?) ?? []).whereType<Map>().where((p) => '${p['state']}' == 'joined').length;
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(color: C.green, borderRadius: BorderRadius.circular(22)),
+      child: Row(children: [
+        const Icon(Icons.graphic_eq_rounded, color: C.dark),
+        const SizedBox(width: 10),
+        Expanded(
+            child: Text('Group ${c['kind']} call in progress · $n in the call',
+                style: const TextStyle(color: C.dark, fontWeight: FontWeight.w700, fontSize: 13))),
+        FilledButton(
+          onPressed: () async {
+            final err = await CallService.I.joinGroup(c, video: '${c['kind']}' == 'video');
+            if (err != null && mounted) toast(context, err);
+          },
+          child: const Text('Join'),
+        ),
+      ]),
+    );
+  }
+
   Widget _header() {
     final online = dm && svc.online.contains(peerId);
     final name = dm ? '${widget.peer!['name']}' : 'Everyone';
@@ -432,6 +547,12 @@ class _ConversationPageState extends State<ConversationPage> {
                     fontSize: 12.5)),
           ]),
         ),
+        if (dm) ...[
+          RoundBtn(Icons.call_outlined, onTap: () => _call('voice')),
+          const SizedBox(width: 8),
+          RoundBtn(Icons.videocam_outlined, onTap: () => _call('video')),
+        ] else
+          RoundBtn(Icons.videocam_outlined, onTap: _groupCall),
       ]),
     );
   }
@@ -640,6 +761,7 @@ class _ConversationPageState extends State<ConversationPage> {
       body: SafeArea(
         child: Column(children: [
           _header(),
+          _callBanner(),
           Expanded(child: _list()),
           if (_uploading) const LinearProgressIndicator(minHeight: 2),
           if (_err.isNotEmpty)
@@ -784,8 +906,30 @@ class MsgBubble extends StatelessWidget {
     }
   }
 
+  Widget _callLine(BuildContext context) {
+    final body = '${m['body'] ?? ''}';
+    final missed = body.startsWith('missed') || body.startsWith('declined');
+    final video = body.contains(':video');
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+        decoration: BoxDecoration(color: theirBubble(context), borderRadius: BorderRadius.circular(20)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(missed ? Icons.call_missed_rounded : (video ? Icons.videocam_rounded : Icons.call_rounded),
+              size: 17, color: missed ? const Color(0xFFD64545) : context.ink),
+          const SizedBox(width: 8),
+          Text(callText(body), style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: missed ? const Color(0xFFD64545) : context.ink)),
+          const SizedBox(width: 8),
+          Text(clockOf(m['created_at']), style: TextStyle(fontSize: 11, color: context.muted)),
+        ]),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if ('${m['kind']}' == 'call') return _callLine(context);
     final kind = '${m['kind']}';
     final bareMedia = (kind == 'image' && '${m['body'] ?? ''}'.isEmpty) || kind == 'video';
     final fg = mine ? Colors.white : context.ink;

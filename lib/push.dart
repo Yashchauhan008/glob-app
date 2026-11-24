@@ -1,6 +1,7 @@
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'api.dart';
+import 'call_ui.dart';
 import 'chat_service.dart';
 import 'notify.dart';
 
@@ -26,7 +27,14 @@ Future<void> firebaseBackgroundHandler(RemoteMessage m) async {
   try {
     await Firebase.initializeApp(options: PushConfig.options);
   } catch (_) {}
-  await Notify.I.showPush(m.data);
+  final t = '${m.data['type']}';
+  if (t == 'call_incoming') {
+    await showIncomingCall(Map<String, dynamic>.from(m.data));
+  } else if (t == 'call_cancel') {
+    await endIncomingCall('${m.data['call_id']}');
+  } else {
+    await Notify.I.showPush(m.data);
+  }
 }
 
 class Push {
@@ -59,7 +67,14 @@ class Push {
       });
       // while the app is open the live connection shows notifications itself
       FirebaseMessaging.onMessage.listen((m) {
-        if (!ChatService.I.connected) Notify.I.showPush(m.data);
+        final t = '${m.data['type']}';
+        if (t == 'call_incoming') {
+          showIncomingCall(Map<String, dynamic>.from(m.data));
+        } else if (t == 'call_cancel') {
+          endIncomingCall('${m.data['call_id']}');
+        } else if (!ChatService.I.connected) {
+          Notify.I.showPush(m.data);
+        }
       });
     } catch (_) {
       _started = false;

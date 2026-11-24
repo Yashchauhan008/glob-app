@@ -149,6 +149,9 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
     });
     s.on('dm:typing', (d) => _ev.add({'t': 'dmtyping', 'm': normMap(d)}));
     s.on('chat:typing', (d) => _ev.add({'t': 'chattyping', 'm': normMap(d)}));
+    s.on('call:incoming', (d) => _ev.add({'t': 'call_incoming', 'm': normMap(d)}));
+    s.on('call:handled', (d) => _ev.add({'t': 'call_handled', 'm': normMap(d)}));
+    s.on('call:state', (d) => _ev.add({'t': 'call_state', 'm': normMap(d)}));
     s.on('notification', (d) {
       final n = normMap(d);
       loadNotifUnread();
@@ -159,13 +162,13 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       if (foreground && conv != null && activeConv == conv) return;
       Notify.I.show(
         id: '${n['id']}',
-        channel: type == 'dm' ? 'dm' : (type == 'chat' ? 'workspace' : 'general'),
-        label: '${n['label'] ?? ''}',
+        channel: type == 'dm' || type == 'call' ? 'dm' : (type == 'chat' ? 'workspace' : 'general'),
         title: '${n['title'] ?? 'Glob'}',
         body: '${n['body'] ?? ''}',
         data: {
-          'type': type,
+          'type': type == 'call' ? 'dm' : type,
           'team_id': '${n['team_id'] ?? ''}',
+          'team_name': '${data['team_name'] ?? ''}',
           'from_id': '${data['from_id'] ?? ''}',
           'question_id': '${data['question_id'] ?? ''}',
         },

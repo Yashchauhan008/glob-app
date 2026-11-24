@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'api.dart';
 
 /// Set when someone taps a notification; the main screen opens the right chat or page.
 class NavIntent {
@@ -9,12 +11,20 @@ class NavIntent {
   static set pending(Map<String, String>? v) => notifier.value = v;
 }
 
-/// Notifications with proper labels: each kind has its own channel, so the phone's settings list them by name.
+/// Runs when a notification button (Reply, Mark as read) is pressed while the app is closed.
+@pragma('vm:entry-point')
+Future<void> notificationTapBackground(NotificationResponse r) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Api.init();
+  await Notify.handleResponse(r);
+}
+
+/// Message notifications look like a messenger's: the sender's name, the message, and Reply / Mark as read buttons.
 class Notify {
   static final Notify I = Notify._();
   Notify._();
 
-  final FlutterLocalNotificationsPlugin _p = FlutterLocalNotificationsPlugin();
+  static final FlutterLocalNotificationsPlugin _p = FlutterLocalNotificationsPlugin();
   bool _ready = false;
 
   static const _dm = AndroidNotificationChannel('dm', 'Direct messages',
@@ -29,7 +39,11 @@ class Notify {
   Future<void> init() async {
     if (_ready) return;
     const settings = InitializationSettings(android: AndroidInitializationSettings('@mipmap/ic_launcher'));
-    await _p.initialize(settings, onDidReceiveNotificationResponse: (r) => _tap(r.payload));
+    await _p.initialize(
+      settings,
+      onDidReceiveNotificationResponse: (r) => handleResponse(r),
+      onDidReceiveBackgroundNotificationResponse: notificationTapBackground,
+    );
     final android = _p.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     for (final c in [_dm, _ws, _gen]) {
       await android?.createNotificationChannel(c);
@@ -47,54 +61,120 @@ class Notify {
   Future<void> launchIntent() async {
     try {
       final d = await _p.getNotificationAppLaunchDetails();
-      if (d?.didNotificationLaunchApp == true) _tap(d!.notificationResponse?.payload);
+      if (d?.didNotificationLaunchApp == true && d!.notificationResponse != null) {
+        await handleResponse(d.notificationResponse!);
+      }
     } catch (_) {}
   }
 
-  void _tap(String? payload) {
+  /// A tap on the notification, or on one of its buttons.
+  static Future<void> handleResponse(NotificationResponse r) async {
+    final payload = r.payload;
     if (payload == null) return;
+    Map<String, dynamic> d;
     try {
-      final m = Map<String, dynamic>.from(jsonDecode(payload) as Map);
-      NavIntent.pending = m.map((k, v) => MapEntry(k, '$v'));
-    } catch (_) {}
+      d = Map<String, dynamic>.from(jsonDecode(payload) as Map);
+    } catch (_) {
+      return;
+    }
+    final type = '${d['type']}';
+    final team = '${d['team_id'] ?? ''}';
+    final from = '${d['from_id'] ?? ''}';
+    final action = r.actionId;
+
+    if (action == 'reply' || action == 'read') {
+      if (Api.token == null) return;
+      if (team.isNotEmpty) Api.teamId = team;
+      try {
+        if (action == 'reply') {
+          final text = (r.input ?? '').trim();
+          if (text.isNotEmpty) {
+            await Api.post(type == 'dm' ? '/chat/dm/$from' : '/chat', {
+              'body': text,
+              'kind': 'text',
+              'client_id': 'n-${DateTime.now().microsecondsSinceEpoch}',
+            });
+          }
+        } else {
+          await Api.post(type == 'dm' ? '/chat/dm/$from/read' : '/chat/read');
+        }
+      } catch (_) {}
+      final id = r.id;
+      if (id != null) {
+        try {
+          await _p.cancel(id);
+        } catch (_) {}
+      }
+      return;
+    }
+    NavIntent.pending = d.map((k, v) => MapEntry(k, '$v'));
   }
 
   Future<void> show({
     required String id,
     required String channel,
-    required String label,
     required String title,
     required String body,
     required Map<String, String> data,
   }) async {
     await init();
     final c = _channel(channel);
-    final details = NotificationDetails(
-      android: AndroidNotificationDetails(
+    final type = data['type'] ?? '';
+    final isMessage = type == 'dm' || type == 'chat';
+    final isGroup = type == 'chat';
+    final teamName = data['team_name'] ?? '';
+
+    final AndroidNotificationDetails android;
+    if (isMessage) {
+      final sender = Person(name: title, key: data['from_id']);
+      android = AndroidNotificationDetails(
         c.id,
         c.name,
         channelDescription: c.description,
         importance: c.importance,
         priority: Priority.high,
-        subText: label,
         category: AndroidNotificationCategory.message,
+        styleInformation: MessagingStyleInformation(
+          const Person(name: 'You'),
+          conversationTitle: isGroup && teamName.isNotEmpty ? teamName : null,
+          groupConversation: isGroup,
+          messages: [Message(body, DateTime.now(), sender)],
+        ),
+        actions: const <AndroidNotificationAction>[
+          AndroidNotificationAction(
+            'reply',
+            'Reply',
+            inputs: <AndroidNotificationActionInput>[AndroidNotificationActionInput(label: 'Reply…')],
+            showsUserInterface: false,
+            cancelNotification: false,
+          ),
+          AndroidNotificationAction('read', 'Mark as read', showsUserInterface: false, cancelNotification: true),
+        ],
+      );
+    } else {
+      android = AndroidNotificationDetails(
+        c.id,
+        c.name,
+        channelDescription: c.description,
+        importance: c.importance,
+        priority: Priority.high,
         styleInformation: BigTextStyleInformation(body),
-      ),
-    );
+      );
+    }
     // the same id replaces the earlier notification, so a busy chat is one entry, not thirty
-    await _p.show(id.hashCode & 0x7fffffff, title, body, details, payload: jsonEncode(data));
+    await _p.show(id.hashCode & 0x7fffffff, title, body, NotificationDetails(android: android), payload: jsonEncode(data));
   }
 
   /// From a push message (data fields are all strings).
   Future<void> showPush(Map<String, dynamic> d) => show(
         id: '${d['notification_id'] ?? DateTime.now().millisecondsSinceEpoch}',
         channel: '${d['channel'] ?? 'general'}',
-        label: '${d['label'] ?? ''}',
         title: '${d['title'] ?? 'Glob'}',
         body: '${d['body'] ?? ''}',
         data: {
           'type': '${d['type'] ?? ''}',
           'team_id': '${d['team_id'] ?? ''}',
+          'team_name': '${d['team_name'] ?? ''}',
           'from_id': '${d['from_id'] ?? ''}',
           'question_id': '${d['question_id'] ?? ''}',
         },

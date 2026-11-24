@@ -3,12 +3,11 @@ import 'api.dart';
 import 'chat_service.dart';
 import 'notify.dart';
 import 'push.dart';
+import 'nav.dart';
 import 'theme.dart';
 import 'pages/auth_page.dart';
 import 'pages/workspaces_page.dart';
 import 'pages/shell.dart';
-
-final navKey = GlobalKey<NavigatorState>();
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

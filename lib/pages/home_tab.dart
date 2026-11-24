@@ -13,7 +13,7 @@ class HomeTab extends StatefulWidget {
 class _HomeTabState extends State<HomeTab> {
   late Future<dynamic> _f = Api.get('/dashboard');
 
-  // index in Shell: 1 ideas, 2 tasks, 3 leads, 4 products, 5 calendar, 6 map, 7 q&a, 8 call
+  // index in Shell: 1 ideas, 2 tasks, 3 leads, 4 products, 5 calendar, 6 map, 7 q&a, 8 chat
   static const _jump = <List<Object>>[
     [1, Icons.lightbulb_outline, 'Ideas'],
     [2, Icons.check_circle_outline, 'Tasks'],
@@ -21,7 +21,7 @@ class _HomeTabState extends State<HomeTab> {
     [5, Icons.event_outlined, 'Calendar'],
     [6, Icons.map_outlined, 'Map'],
     [7, Icons.help_outline, 'Q&A'],
-    [8, Icons.headset_mic_outlined, 'Call'],
+    [8, Icons.chat_bubble_outline, 'Chat'],
     [4, Icons.inventory_2_outlined, 'Products'],
   ];
 

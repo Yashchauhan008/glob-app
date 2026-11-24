@@ -33,12 +33,16 @@ jobs:
         run: |
           M=android/app/src/main/AndroidManifest.xml
           PERMS=""
-          for p in INTERNET ACCESS_NETWORK_STATE CHANGE_NETWORK_STATE RECORD_AUDIO MODIFY_AUDIO_SETTINGS CAMERA BLUETOOTH BLUETOOTH_CONNECT WAKE_LOCK POST_NOTIFICATIONS VIBRATE; do
+          for p in INTERNET ACCESS_NETWORK_STATE CHANGE_NETWORK_STATE RECORD_AUDIO MODIFY_AUDIO_SETTINGS CAMERA BLUETOOTH BLUETOOTH_CONNECT WAKE_LOCK POST_NOTIFICATIONS VIBRATE FOREGROUND_SERVICE FOREGROUND_SERVICE_MEDIA_PROJECTION FOREGROUND_SERVICE_MICROPHONE FOREGROUND_SERVICE_CAMERA USE_FULL_SCREEN_INTENT; do
             PERMS="$PERMS<uses-permission android:name=\"android.permission.$p\"/>\n    "
           done
           sed -i "s#<application#${PERMS}<application#" "$M"
           sed -i 's#android:label="[^"]*"#android:label="Glob"#' "$M"
-          grep -n "INTERNET\|label" "$M"
+          # the incoming-call screen plugin needs the main activity to be a single instance
+          sed -i 's#android:launchMode="[^"]*"#android:launchMode="singleInstance"#' "$M"
+          # screen sharing on Android runs as a foreground service
+          sed -i 's#</application>#<service android:name="de.julianassmann.flutter_background.IsolateHolderService" android:enabled="true" android:exported="false" android:foregroundServiceType="mediaProjection" />\n    </application>#' "$M"
+          grep -n "INTERNET\|label\|launchMode\|IsolateHolderService" "$M"
 
       # flutter_local_notifications needs Java desugaring; the audio recorder needs minSdk 23+
       - name: Patch Gradle (desugaring, minSdk)
