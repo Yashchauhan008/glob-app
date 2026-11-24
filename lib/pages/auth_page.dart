@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../api.dart';
 import 'workspaces_page.dart';
 
@@ -39,6 +40,27 @@ class _AuthPageState extends State<AuthPage> {
     Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const WorkspacesPage()), (_) => false);
   }
+
+  Future<void> _google() => _run(() async {
+        final cfg = await Api.get('/auth/config');
+        final cid = cfg is Map ? cfg['google_client_id'] : null;
+        if (cid == null) throw ApiError('Google sign-in is not enabled on the server.', 404);
+        final gs = GoogleSignIn(scopes: const ['email'], serverClientId: '$cid');
+        try {
+          await gs.signOut();
+        } catch (_) {}
+        GoogleSignInAccount? acc;
+        try {
+          acc = await gs.signIn();
+        } catch (e) {
+          throw ApiError('Google sign-in failed ($e). The Android OAuth client may not be set up yet.', 0);
+        }
+        if (acc == null) return; // cancelled
+        final auth = await acc.authentication;
+        final idToken = auth.idToken;
+        if (idToken == null) throw ApiError('Google did not return an ID token.', 0);
+        _done(await Api.post('/auth/google', {'id_token': idToken}));
+      });
 
   Future<void> _submit() => _run(() async {
         final email = _email.text.trim().toLowerCase();
@@ -131,6 +153,12 @@ class _AuthPageState extends State<AuthPage> {
                                   : _register
                                       ? 'Continue'
                                       : 'Log in'))),
+                  if (!verifying)
+                    OutlinedButton.icon(
+                        onPressed: _busy ? null : _google,
+                        icon: const Icon(Icons.account_circle_outlined),
+                        label: const Padding(
+                            padding: EdgeInsets.all(12), child: Text('Continue with Google'))),
                   TextButton(
                       onPressed: _busy
                           ? null
