@@ -49,10 +49,26 @@ jobs:
           printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n' >> "$F"
           grep -n "isCoreLibraryDesugaringEnabled\|minSdk\|coreLibraryDesugaring" "$F"
 
-      # Android lint crashes on this JDK/AGP combo inside plugins; we don't need it for a release APK
-      - name: Disable lintVital and AAR-metadata checks
+      # Android lint crashes on this JDK/AGP combo inside plugins, and some plugins are compiled against an
+      # older Android SDK than their dependencies want: skip lint, raise their compileSdk to 36.
+      - name: Patch root Gradle (no lintVital, compileSdk 36 for plugins)
         run: |
-          printf '\nallprojects { tasks.whenTaskAdded { if (name.startsWith("lintVital") || (name.startsWith("check") && name.endsWith("AarMetadata"))) { enabled = false } } }\n' >> android/build.gradle.kts
+          cat >> android/build.gradle.kts <<'EOF'
+
+          allprojects { tasks.whenTaskAdded { if (name.startsWith("lintVital")) { enabled = false } } }
+
+          subprojects {
+              if (!state.executed) {
+                  afterEvaluate {
+                      val ext = extensions.findByName("android")
+                      if (ext != null) {
+                          ext.javaClass.methods.firstOrNull { it.name == "setCompileSdk" && it.parameterCount == 1 }?.invoke(ext, 36)
+                      }
+                  }
+              }
+          }
+          EOF
+          tail -15 android/build.gradle.kts
 
       - run: flutter pub get
 
