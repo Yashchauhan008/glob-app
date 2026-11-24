@@ -96,10 +96,10 @@ class _AuthPageState extends State<AuthPage> {
                     Container(
                         width: 52,
                         height: 52,
-                        decoration: const BoxDecoration(color: C.ink, shape: BoxShape.circle),
+                        decoration: const BoxDecoration(color: C.coral, shape: BoxShape.circle),
                         alignment: Alignment.center,
                         child: const Text('G',
-                            style: TextStyle(color: C.yellow, fontSize: 26, fontWeight: FontWeight.w800))),
+                            style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800))),
                     const SizedBox(width: 12),
                     const Text('Glob', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
                   ]),

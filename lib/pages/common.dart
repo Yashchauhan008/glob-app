@@ -115,19 +115,20 @@ class GCard extends StatelessWidget {
   Widget build(BuildContext context) => Container(
       width: double.infinity,
       padding: padding,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(24)),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(28)),
       child: child);
 }
 
 /// Big yellow rounded panel that holds white cards.
 class Panel extends StatelessWidget {
   final Widget child;
-  const Panel({super.key, required this.child});
+  final Color color;
+  const Panel({super.key, required this.child, this.color = C.blue});
   @override
   Widget build(BuildContext context) => Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: C.yellow, borderRadius: BorderRadius.circular(30)),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(30)),
       child: child);
 }
 
@@ -138,12 +139,84 @@ class SectionTitle extends StatelessWidget {
   const SectionTitle(this.title, {super.key, this.action, this.onAction});
   @override
   Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
+      padding: const EdgeInsets.fromLTRB(4, 22, 4, 12),
       child: Row(children: [
-        Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+        Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
         if (action != null)
           GestureDetector(
               onTap: onAction,
               child: Text(action!, style: const TextStyle(fontSize: 13, color: C.muted))),
       ]));
+}
+
+/// Round white icon button, like the bell / back buttons in the design.
+class RoundBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+  final Color color;
+  final Color iconColor;
+  final double size;
+  const RoundBtn(this.icon,
+      {super.key, this.onTap, this.color = Colors.white, this.iconColor = C.ink, this.size = 46});
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+      onTap: onTap,
+      child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle, boxShadow: const [
+            BoxShadow(color: Color(0x12000000), blurRadius: 10, offset: Offset(0, 3))
+          ]),
+          child: Icon(icon, color: iconColor, size: size * 0.45)));
+}
+
+/// Small coloured pill label.
+class Tag extends StatelessWidget {
+  final String text;
+  final Color color;
+  final IconData? icon;
+  const Tag(this.text, {super.key, this.color = Colors.white, this.icon});
+  @override
+  Widget build(BuildContext context) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        if (icon != null) ...[Icon(icon, size: 14), const SizedBox(width: 6)],
+        Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      ]));
+}
+
+/// Half-circle gauge with a percentage inside the arc.
+class Gauge extends StatelessWidget {
+  final double value; // 0..1
+  final Color color;
+  const Gauge({super.key, required this.value, required this.color});
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: const Size(84, 46), painter: _GaugePainter(value.clamp(0, 1).toDouble(), color));
+}
+
+class _GaugePainter extends CustomPainter {
+  final double v;
+  final Color color;
+  _GaugePainter(this.v, this.color);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromLTWH(6, 6, size.width - 12, size.width - 12);
+    final bg = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 9
+      ..strokeCap = StrokeCap.round
+      ..color = const Color(0xFFE6E6EA);
+    final fg = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 9
+      ..strokeCap = StrokeCap.round
+      ..color = color;
+    canvas.drawArc(rect, 3.14159265, 3.14159265, false, bg);
+    if (v > 0) canvas.drawArc(rect, 3.14159265, 3.14159265 * v, false, fg);
+  }
+
+  @override
+  bool shouldRepaint(covariant _GaugePainter o) => o.v != v || o.color != color;
 }

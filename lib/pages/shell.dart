@@ -77,55 +77,46 @@ class _ShellState extends State<Shell> {
     final name = '${Api.user?['name'] ?? ''}';
     final initial = name.isEmpty ? 'G' : name.characters.first.toUpperCase();
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(children: [
         PopupMenuButton<String>(
           onSelected: _menu,
-          offset: const Offset(0, 52),
+          offset: const Offset(0, 56),
           itemBuilder: (_) => const [
             PopupMenuItem(value: 'switch', child: Text('Switch workspace')),
             PopupMenuItem(value: 'out', child: Text('Sign out')),
           ],
           child: Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(color: C.ink, shape: BoxShape.circle),
+            width: 48,
+            height: 48,
+            decoration: const BoxDecoration(color: C.coral, shape: BoxShape.circle),
             alignment: Alignment.center,
             child: Text(initial,
-                style: const TextStyle(color: C.yellow, fontWeight: FontWeight.w800, fontSize: 20)),
+                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20)),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text('Hey,', style: TextStyle(color: C.muted, fontSize: 13)),
-            Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 17)),
-          ]),
+          child: Text.rich(TextSpan(children: [
+            const TextSpan(text: 'Hello, ', style: TextStyle(color: C.muted)),
+            TextSpan(text: name, style: const TextStyle(fontWeight: FontWeight.w800)),
+          ]), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16)),
         ),
         if (call.connected)
           GestureDetector(
             onTap: () => setState(() => _i = 8),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(color: C.ink, borderRadius: BorderRadius.circular(20)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(color: C.green, borderRadius: BorderRadius.circular(20)),
               child: const Row(children: [
-                Icon(Icons.fiber_manual_record, color: Colors.redAccent, size: 12),
+                Icon(Icons.graphic_eq, size: 16),
                 SizedBox(width: 6),
-                Text('Live', style: TextStyle(color: Colors.white, fontSize: 12)),
+                Text('In call', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
               ]),
             ),
           ),
-        GestureDetector(
-          onTap: () => _scaffold.currentState?.openDrawer(),
-          child: Container(
-            width: 46,
-            height: 46,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: const Icon(Icons.apps_rounded),
-          ),
-        ),
+        RoundBtn(Icons.apps_rounded, onTap: () => _scaffold.currentState?.openDrawer()),
       ]),
     );
   }
@@ -138,8 +129,8 @@ class _ShellState extends State<Shell> {
           width: 48,
           height: 48,
           decoration: BoxDecoration(
-              color: selected ? C.yellow : Colors.transparent, shape: BoxShape.circle),
-          child: Icon(icon, color: selected ? C.ink : Colors.white70),
+              color: selected ? C.ink : Colors.transparent, shape: BoxShape.circle),
+          child: Icon(icon, color: selected ? Colors.white : C.muted),
         ),
       );
 
@@ -147,9 +138,9 @@ class _ShellState extends State<Shell> {
         height: 64,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
-          color: C.ink,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(34),
-          boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 18, offset: Offset(0, 6))],
+          boxShadow: const [BoxShadow(color: Color(0x1F000000), blurRadius: 22, offset: Offset(0, 8))],
         ),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           for (var k = 0; k < 4; k++) _navItem(all[k].icon, _i == k, () => setState(() => _i = k)),
@@ -178,7 +169,7 @@ class _ShellState extends State<Shell> {
                   leading: Icon(all[k].icon),
                   title: Text(all[k].title),
                   selected: k == _i,
-                  selectedTileColor: C.yellow,
+                  selectedTileColor: C.blue,
                   selectedColor: C.ink,
                   onTap: () {
                     Navigator.pop(context);
@@ -194,13 +185,13 @@ class _ShellState extends State<Shell> {
         child: Stack(children: [
           Column(children: [
             _header(),
-            if (_i != 0)
+            if (true)
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                 child: Align(
                     alignment: Alignment.centerLeft,
-                    child: Text(d.title,
-                        style: const TextStyle(fontSize: 26, fontWeight: FontWeight.w800))),
+                    child: Text(_i == 0 ? 'Overview' : d.title,
+                        style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800))),
               ),
             Expanded(child: Padding(padding: const EdgeInsets.only(bottom: 92), child: d.build())),
           ]),

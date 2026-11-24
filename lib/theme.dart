@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 
 class C {
-  static const bg = Color(0xFFEFEDE8);
-  static const ink = Color(0xFF111111);
-  static const yellow = Color(0xFFF6C85F);
-  static const yellowSoft = Color(0xFFFAE2A3);
+  static const bg = Color(0xFFF1F1F3);
+  static const ink = Color(0xFF16161A);
+  static const blue = Color(0xFFBFE4EE);
+  static const green = Color(0xFFD0E8B5);
+  static const yellow = Color(0xFFF8E58F);
+  static const coral = Color(0xFFF0A48C);
+  static const yellowSoft = Color(0xFFD0E8B5);
   static const card = Colors.white;
-  static const muted = Color(0xFF6B6B6B);
+  static const muted = Color(0xFF8A8A92);
 }
 
 ThemeData buildTheme() {
-  const r20 = BorderRadius.all(Radius.circular(20));
+  const r20 = BorderRadius.all(Radius.circular(26));
   final base = ThemeData.light(useMaterial3: true);
   final scheme = ColorScheme.fromSeed(seedColor: C.yellow).copyWith(
     primary: C.ink,
@@ -63,21 +66,21 @@ ThemeData buildTheme() {
       style: TextButton.styleFrom(foregroundColor: C.ink),
     ),
     floatingActionButtonTheme: const FloatingActionButtonThemeData(
-      backgroundColor: C.yellow,
-      foregroundColor: C.ink,
+      backgroundColor: C.ink,
+      foregroundColor: Colors.white,
       elevation: 0,
       focusElevation: 0,
       hoverElevation: 0,
       highlightElevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22))),
+      shape: CircleBorder(),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: Colors.white,
-      border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
       focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: C.ink, width: 1.2)),
+          borderRadius: BorderRadius.circular(22), borderSide: const BorderSide(color: C.ink, width: 1.2)),
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     ),
     listTileTheme: const ListTileThemeData(
@@ -93,7 +96,7 @@ ThemeData buildTheme() {
             (s) => s.contains(WidgetState.selected) ? Colors.white : C.ink),
         side: const WidgetStatePropertyAll(BorderSide.none),
         iconColor: WidgetStateProperty.resolveWith(
-            (s) => s.contains(WidgetState.selected) ? C.yellow : C.ink),
+            (s) => s.contains(WidgetState.selected) ? Colors.white : C.ink),
       ),
     ),
     chipTheme: ChipThemeData(
@@ -105,7 +108,7 @@ ThemeData buildTheme() {
     checkboxTheme: CheckboxThemeData(
       fillColor: WidgetStateProperty.resolveWith(
           (s) => s.contains(WidgetState.selected) ? C.ink : Colors.transparent),
-      checkColor: const WidgetStatePropertyAll(C.yellow),
+      checkColor: const WidgetStatePropertyAll(Colors.white),
       side: const BorderSide(color: C.ink, width: 1.5),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
     ),
