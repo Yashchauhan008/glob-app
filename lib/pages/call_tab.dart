@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import '../api.dart';
 import '../call.dart';
+import '../chat_service.dart';
+import 'common.dart';
 
 class CallTab extends StatefulWidget {
   const CallTab({super.key});
@@ -58,9 +60,13 @@ class _CallTabState extends State<CallTab> {
         if (v != null)
           SizedBox(height: 180, width: double.infinity, child: VideoTrackRenderer(v))
         else
-          const Padding(
-              padding: EdgeInsets.only(top: 16),
-              child: CircleAvatar(radius: 28, child: Icon(Icons.person, size: 32))),
+          Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Avatar(
+                  id: p.identity,
+                  name: name,
+                  url: ChatService.I.personById(p.identity)?['avatar_url'] as String?,
+                  size: 60)),
         Padding(padding: const EdgeInsets.all(10), child: Text(name)),
       ]),
     );

@@ -41,6 +41,27 @@ class Api {
     await _p!.setString('user', jsonEncode(u));
   }
 
+  static Future<void> persistUser() async {
+    if (user != null) await _p?.setString('user', jsonEncode(user));
+  }
+
+  /// Sends a picture, voice note, video or document for use in chat. Returns {url, name, mime, kind, ...}.
+  static Future<Map<String, dynamic>> upload(String path, String filename) async {
+    final req = http.MultipartRequest('POST', Uri.parse('$kApiUrl/chat/upload'));
+    req.headers.addAll(_headers(false));
+    req.files.add(await http.MultipartFile.fromPath('file', path, filename: filename));
+    final streamed = await req.send().timeout(const Duration(minutes: 4));
+    final r = await http.Response.fromStream(streamed);
+    dynamic data;
+    try {
+      data = jsonDecode(r.body);
+    } catch (_) {}
+    if (r.statusCode >= 400) {
+      throw ApiError(data is Map && data['message'] != null ? '${data['message']}' : 'Upload failed', r.statusCode);
+    }
+    return Map<String, dynamic>.from(data as Map);
+  }
+
   static Future<void> setTeam(String? id) async {
     teamId = id;
     if (id == null) {

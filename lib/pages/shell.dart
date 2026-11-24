@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
 import '../call.dart';
+import '../chat_service.dart';
+import '../notify.dart';
+import '../push.dart';
 import '../theme.dart';
 import 'auth_page.dart';
 import 'workspaces_page.dart';
@@ -14,9 +17,14 @@ import 'calendar_tab.dart';
 import 'map_tab.dart';
 import 'qa_tab.dart';
 import 'call_tab.dart';
+import 'chat_tab.dart';
+import 'conversation_page.dart';
+import 'notifications_page.dart';
 
 class Shell extends StatefulWidget {
-  const Shell({super.key});
+  /// Where to go on start-up, when the app was opened from a notification in another workspace.
+  final Map<String, String>? intent;
+  const Shell({super.key, this.intent});
   @override
   State<Shell> createState() => _ShellState();
 }
@@ -28,10 +36,15 @@ class _Dest {
   const _Dest(this.title, this.icon, this.build);
 }
 
+const _kQa = 7;
+const _kCall = 8;
+const _kChat = 9;
+
 class _ShellState extends State<Shell> {
   int _i = 0;
   final _scaffold = GlobalKey<ScaffoldState>();
   final call = CallService.I;
+  final chat = ChatService.I;
 
   List<_Dest> get _all => [
         _Dest('Overview', Icons.home_outlined, () => HomeTab(onGo: (i) => setState(() => _i = i))),
@@ -43,17 +56,32 @@ class _ShellState extends State<Shell> {
         _Dest('Map', Icons.map_outlined, () => const MapTab()),
         _Dest('Q&A', Icons.help_outline, () => const QaTab()),
         _Dest('Call', Icons.headset_mic_outlined, () => const CallTab()),
+        _Dest('Message', Icons.chat_bubble_outline, () => const ChatTab()),
       ];
 
   @override
   void initState() {
     super.initState();
     call.addListener(_r);
+    chat.addListener(_r);
+    NavIntent.notifier.addListener(_onIntent);
+    chat.connect();
+    Notify.I.init().then((_) => Notify.I.requestPermission());
+    Push.register();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = widget.intent ?? NavIntent.pending;
+      if (pending != null) {
+        NavIntent.pending = null;
+        _handleIntent(pending);
+      }
+    });
   }
 
   @override
   void dispose() {
     call.removeListener(_r);
+    chat.removeListener(_r);
+    NavIntent.notifier.removeListener(_onIntent);
     super.dispose();
   }
 
@@ -61,21 +89,66 @@ class _ShellState extends State<Shell> {
     if (mounted) setState(() {});
   }
 
+  void _onIntent() {
+    final i = NavIntent.pending;
+    if (i == null || !mounted) return;
+    NavIntent.pending = null;
+    _handleIntent(i);
+  }
+
+  Future<void> _handleIntent(Map<String, String> i) async {
+    final team = i['team_id'] ?? '';
+    final nav = Navigator.of(context);
+    if (team.isNotEmpty && team != Api.teamId) {
+      // the notification belongs to another workspace: switch to it, then open it
+      await call.leave();
+      chat.disconnect();
+      await Api.setTeam(team);
+      nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => Shell(intent: i)), (_) => false);
+      return;
+    }
+    switch (i['type']) {
+      case 'dm':
+        final id = i['from_id'] ?? '';
+        if (chat.inbox == null) await chat.loadInbox();
+        final peer = chat.personById(id);
+        if (!mounted) return;
+        setState(() => _i = _kChat);
+        if (peer != null) nav.push(MaterialPageRoute(builder: (_) => ConversationPage(peer: peer)));
+        break;
+      case 'chat':
+        setState(() => _i = _kChat);
+        nav.push(MaterialPageRoute(builder: (_) => const ConversationPage()));
+        break;
+      case 'answer':
+        setState(() => _i = _kQa);
+        break;
+    }
+  }
+
   Future<void> _menu(String v) async {
     final nav = Navigator.of(context);
     await call.leave();
     if (v == 'switch') {
+      chat.disconnect();
       await Api.setTeam(null);
       nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WorkspacesPage()), (_) => false);
     } else {
+      await Push.unregister();
+      chat.disconnect();
       await Api.signOut();
       nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthPage()), (_) => false);
     }
   }
 
+  Widget _badged(Widget child, int count) => Stack(clipBehavior: Clip.none, children: [
+        child,
+        Positioned(right: -3, top: -3, child: CountBadge(count)),
+      ]);
+
   Widget _header() {
     final name = '${Api.user?['name'] ?? ''}';
-    final initial = name.isEmpty ? 'G' : name.characters.first.toUpperCase();
+    final me = Api.user;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(children: [
@@ -86,14 +159,7 @@ class _ShellState extends State<Shell> {
             PopupMenuItem(value: 'switch', child: Text('Switch workspace')),
             PopupMenuItem(value: 'out', child: Text('Sign out')),
           ],
-          child: Container(
-            width: 48,
-            height: 48,
-            decoration: const BoxDecoration(color: C.coral, shape: BoxShape.circle),
-            alignment: Alignment.center,
-            child: Text(initial,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 20)),
-          ),
+          child: Avatar(id: '${me?['id'] ?? ''}', name: name, url: me?['avatar_url'] as String?, size: 48),
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -108,7 +174,7 @@ class _ShellState extends State<Shell> {
         ),
         if (call.connected)
           GestureDetector(
-            onTap: () => setState(() => _i = 8),
+            onTap: () => setState(() => _i = _kCall),
             child: Container(
               margin: const EdgeInsets.only(right: 8),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -122,7 +188,16 @@ class _ShellState extends State<Shell> {
           ),
         const ThemeToggle(),
         const SizedBox(width: 8),
-        RoundBtn(Icons.apps_rounded, onTap: () => _scaffold.currentState?.openDrawer()),
+        _badged(
+          RoundBtn(Icons.notifications_none_rounded, onTap: () async {
+            await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsPage()));
+            chat.loadNotifUnread();
+          }),
+          chat.notifUnread,
+        ),
+        const SizedBox(width: 8),
+        // the chat button sits where the menu button used to be
+        _badged(RoundBtn(Icons.chat_bubble_outline_rounded, onTap: () => setState(() => _i = _kChat)), chat.unread),
       ]),
     );
   }
@@ -205,8 +280,7 @@ class _ShellState extends State<Shell> {
                   transitionBuilder: (c, a) => FadeTransition(
                       opacity: a,
                       child: SlideTransition(
-                          position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a),
-                          child: c)),
+                          position: Tween(begin: const Offset(0, 0.25), end: Offset.zero).animate(a), child: c)),
                   child: Text(d.title,
                       key: ValueKey(d.title),
                       style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w800)),

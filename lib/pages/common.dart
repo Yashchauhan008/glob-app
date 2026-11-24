@@ -287,3 +287,117 @@ class _GaugePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _GaugePainter o) => o.v != v || o.color != color || o.track != track;
 }
+
+Color avatarColor(String id) {
+  var h = 0;
+  for (final c in id.codeUnits) {
+    h = (h * 31 + c) % 360;
+  }
+  return HSLColor.fromAHSL(1, h.toDouble(), 0.7, 0.76).toColor();
+}
+
+String initialsOf(String name) {
+  final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).take(2).toList();
+  if (parts.isEmpty) return '?';
+  return parts.map((p) => p.characters.first.toUpperCase()).join();
+}
+
+/// A person's picture, or their initials on a colour when they have none.
+class Avatar extends StatelessWidget {
+  final String id;
+  final String name;
+  final String? url;
+  final double size;
+  final bool online;
+  const Avatar({super.key, required this.id, required this.name, this.url, this.size = 44, this.online = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = Center(
+        child: Text(initialsOf(name),
+            style: TextStyle(fontSize: size * 0.36, fontWeight: FontWeight.w800, color: C.dark)));
+    final hasUrl = url != null && url!.isNotEmpty && url != 'null';
+    final face = ClipOval(
+      child: Container(
+        width: size,
+        height: size,
+        color: avatarColor(id),
+        child: hasUrl
+            ? Image.network(url!, fit: BoxFit.cover, width: size, height: size,
+                errorBuilder: (_, __, ___) => initials)
+            : initials,
+      ),
+    );
+    if (!online) return face;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(clipBehavior: Clip.none, children: [
+        face,
+        Positioned(
+          right: -1,
+          bottom: -1,
+          child: Container(
+            width: size * 0.27,
+            height: size * 0.27,
+            decoration: BoxDecoration(
+                color: const Color(0xFF4CC38A),
+                shape: BoxShape.circle,
+                border: Border.all(color: context.bg, width: 2)),
+          ),
+        ),
+      ]),
+    );
+  }
+}
+
+/// A small count bubble to sit on a corner of something.
+class CountBadge extends StatelessWidget {
+  final int count;
+  const CountBadge(this.count, {super.key});
+  @override
+  Widget build(BuildContext context) => count <= 0
+      ? const SizedBox.shrink()
+      : Container(
+          constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+          padding: const EdgeInsets.symmetric(horizontal: 5),
+          decoration: BoxDecoration(
+              color: C.coral, borderRadius: BorderRadius.circular(10), border: Border.all(color: context.bg, width: 2)),
+          alignment: Alignment.center,
+          child: Text(count > 9 ? '9+' : '$count',
+              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: C.dark)),
+        );
+}
+
+String clockOf(dynamic iso) {
+  final d = DateTime.tryParse('$iso')?.toLocal();
+  if (d == null) return '';
+  return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+}
+
+/// "10:24" for today, otherwise "5 Nov".
+String whenOf(dynamic iso) {
+  final d = DateTime.tryParse('$iso')?.toLocal();
+  if (d == null) return '';
+  final n = DateTime.now();
+  if (d.year == n.year && d.month == n.month && d.day == n.day) return clockOf(iso);
+  const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return '${d.day} ${m[d.month - 1]}';
+}
+
+String previewOf(Map? m) {
+  if (m == null) return '';
+  switch ('${m['kind']}') {
+    case 'image':
+      return '📷 Photo';
+    case 'video':
+      return '🎥 Video';
+    case 'audio':
+      final s = ((m['duration_ms'] as num?) ?? 0) ~/ 1000;
+      return '🎤 Voice message ${s ~/ 60}:${(s % 60).toString().padLeft(2, '0')}';
+    case 'file':
+      return '📎 ${m['file_name'] ?? 'Document'}';
+    default:
+      return '${m['body'] ?? ''}';
+  }
+}

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
+import 'chat_service.dart';
+import 'notify.dart';
+import 'push.dart';
 import 'theme.dart';
 import 'pages/auth_page.dart';
 import 'pages/workspaces_page.dart';
@@ -11,11 +14,17 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Api.init();
   await ThemeController.load();
+  await Push.bootstrap();
+  try {
+    await Notify.I.init();
+  } catch (_) {}
   Api.onSignedOut = () {
+    ChatService.I.disconnect();
     navKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthPage()), (_) => false);
   };
   runApp(const GlobApp());
+  Notify.I.launchIntent();
 }
 
 class GlobApp extends StatelessWidget {

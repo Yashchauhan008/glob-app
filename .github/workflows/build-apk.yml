@@ -33,12 +33,21 @@ jobs:
         run: |
           M=android/app/src/main/AndroidManifest.xml
           PERMS=""
-          for p in INTERNET ACCESS_NETWORK_STATE CHANGE_NETWORK_STATE RECORD_AUDIO MODIFY_AUDIO_SETTINGS CAMERA BLUETOOTH BLUETOOTH_CONNECT WAKE_LOCK; do
+          for p in INTERNET ACCESS_NETWORK_STATE CHANGE_NETWORK_STATE RECORD_AUDIO MODIFY_AUDIO_SETTINGS CAMERA BLUETOOTH BLUETOOTH_CONNECT WAKE_LOCK POST_NOTIFICATIONS VIBRATE; do
             PERMS="$PERMS<uses-permission android:name=\"android.permission.$p\"/>\n    "
           done
           sed -i "s#<application#${PERMS}<application#" "$M"
           sed -i 's#android:label="[^"]*"#android:label="Glob"#' "$M"
           grep -n "INTERNET\|label" "$M"
+
+      # flutter_local_notifications needs Java desugaring; the audio recorder needs minSdk 23+
+      - name: Patch Gradle (desugaring, minSdk)
+        run: |
+          F=android/app/build.gradle.kts
+          sed -i 's#sourceCompatibility = JavaVersion#isCoreLibraryDesugaringEnabled = true\n        sourceCompatibility = JavaVersion#' "$F"
+          sed -i 's#minSdk = flutter.minSdkVersion#minSdk = 24#' "$F"
+          printf '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n' >> "$F"
+          grep -n "isCoreLibraryDesugaringEnabled\|minSdk\|coreLibraryDesugaring" "$F"
 
       # Android lint crashes on this JDK/AGP combo inside plugins; we don't need it for a release APK
       - name: Disable lintVital tasks
@@ -47,12 +56,19 @@ jobs:
 
       - run: flutter pub get
 
+      - name: Generate app icon
+        run: dart run flutter_launcher_icons
+
       - name: Build release APK
         run: |
           flutter build apk --release \
             --build-name=1.0.${{ github.run_number }} \
             --build-number=${{ github.run_number }} \
-            --dart-define=API_URL=https://api.glob.yashchauhan.pro
+            --dart-define=API_URL=https://api.glob.yashchauhan.pro \
+            --dart-define=FIREBASE_API_KEY=${{ secrets.FIREBASE_API_KEY }} \
+            --dart-define=FIREBASE_APP_ID=${{ secrets.FIREBASE_APP_ID }} \
+            --dart-define=FIREBASE_SENDER_ID=${{ secrets.FIREBASE_SENDER_ID }} \
+            --dart-define=FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
 
       # Sign with OUR permanent key so every new APK installs over the old one (no data loss)
       - name: Sign APK with release keystore

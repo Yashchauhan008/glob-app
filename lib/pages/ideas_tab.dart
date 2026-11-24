@@ -125,15 +125,7 @@ class _IdeasTabState extends State<IdeasTab> {
           ],
           const SizedBox(height: 14),
           Row(children: [
-            Container(
-              width: 26,
-              height: 26,
-              alignment: Alignment.center,
-              decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-              child: Text(
-                  '${i['owner_name'] ?? '?'}'.isEmpty ? '?' : '${i['owner_name']}'.characters.first.toUpperCase(),
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-            ),
+            Avatar(id: '${i['owner_id']}', name: '${i['owner_name'] ?? '?'}', url: i['owner_avatar'] as String?, size: 26),
             const SizedBox(width: 8),
             Expanded(
                 child: Text('${i['owner_name'] ?? ''}',
@@ -278,8 +270,12 @@ class _IdeaPageState extends State<IdeaPage> {
                               style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1))),
                     Text('${m['body'] ?? ''}'),
                     const SizedBox(height: 6),
-                    Text('${m['owner_name'] ?? m['author_name'] ?? ''}',
-                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    Row(children: [
+                      Avatar(id: '${m['owner_id']}', name: '${m['owner_name'] ?? '?'}', url: m['owner_avatar'] as String?, size: 20),
+                      const SizedBox(width: 6),
+                      Text('${m['owner_name'] ?? m['author_name'] ?? ''}',
+                          style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ]),
                   ]),
                 ),
               );

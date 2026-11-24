@@ -32,8 +32,9 @@ class _QaTabState extends State<QaTab> {
         row: (c, q, reload) {
           final solved = q['accepted_answer_id'] != null;
           return ListTile(
-            leading: Icon(solved ? Icons.check_circle : Icons.help_outline,
-                color: solved ? Colors.green : null),
+            leading: Avatar(
+                id: '${q['owner_id']}', name: '${q['owner_name'] ?? '?'}', url: q['owner_avatar'] as String?, size: 44),
+            trailing: Icon(solved ? Icons.check_circle : Icons.help_outline, color: solved ? Colors.green : null),
             title: Text('${q['title']}'),
             subtitle: Text('${q['owner_name'] ?? ''} · ${q['answers_count'] ?? 0} answers'),
             onTap: () async {
@@ -116,6 +117,8 @@ class _QuestionPageState extends State<QuestionPage> {
                         ? Theme.of(c).colorScheme.primaryContainer
                         : null,
                     child: ListTile(
+                      leading: Avatar(
+                          id: '${a['owner_id']}', name: '${a['owner_name'] ?? '?'}', url: a['owner_avatar'] as String?, size: 38),
                       title: Text('${a['body']}'),
                       subtitle: Text('${a['owner_name'] ?? ''}'),
                       trailing: '${a['id']}' == '$accepted'
