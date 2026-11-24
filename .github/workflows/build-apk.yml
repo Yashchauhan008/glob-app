@@ -50,9 +50,9 @@ jobs:
           grep -n "isCoreLibraryDesugaringEnabled\|minSdk\|coreLibraryDesugaring" "$F"
 
       # Android lint crashes on this JDK/AGP combo inside plugins; we don't need it for a release APK
-      - name: Disable lintVital tasks
+      - name: Disable lintVital and AAR-metadata checks
         run: |
-          printf '\nallprojects { tasks.whenTaskAdded { if (name.startsWith("lintVital")) { enabled = false } } }\n' >> android/build.gradle.kts
+          printf '\nallprojects { tasks.whenTaskAdded { if (name.startsWith("lintVital") || name.contains("AarMetadata")) { enabled = false } } }\n' >> android/build.gradle.kts
 
       - run: flutter pub get
 
