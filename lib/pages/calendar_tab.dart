@@ -147,13 +147,13 @@ class _CalendarTabState extends State<CalendarTab> {
             if (day != last) {
               last = day;
               children.add(Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 4),
                   child: Text(day, style: Theme.of(c).textTheme.titleSmall)));
             }
             final hh = i.hasTime
                 ? '${i.when.hour.toString().padLeft(2, '0')}:${i.when.minute.toString().padLeft(2, '0')}'
                 : 'all day';
-            children.add(ListTile(
+            children.add(Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4), child: ListTile(
               leading: Icon(_icon(i.type)),
               title: Text(i.title),
               subtitle: Text('$hh · ${i.kind}${i.notes.isNotEmpty ? ' · ${i.notes}' : ''}'),
@@ -169,7 +169,7 @@ class _CalendarTabState extends State<CalendarTab> {
                         _reload();
                       })
                   : null,
-            ));
+            )));
           }
           return RefreshIndicator(
               onRefresh: () async {

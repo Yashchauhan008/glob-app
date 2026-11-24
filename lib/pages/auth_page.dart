@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../api.dart';
 import 'workspaces_page.dart';
+import '../theme.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -91,11 +92,17 @@ class _AuthPageState extends State<AuthPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Text('Glob',
-                      style: Theme.of(context)
-                          .textTheme
-                          .displaySmall
-                          ?.copyWith(fontWeight: FontWeight.bold)),
+                  Row(children: [
+                    Container(
+                        width: 52,
+                        height: 52,
+                        decoration: const BoxDecoration(color: C.ink, shape: BoxShape.circle),
+                        alignment: Alignment.center,
+                        child: const Text('G',
+                            style: TextStyle(color: C.yellow, fontSize: 26, fontWeight: FontWeight.w800))),
+                    const SizedBox(width: 12),
+                    const Text('Glob', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+                  ]),
                   const SizedBox(height: 8),
                   Text(
                       verifying
@@ -111,27 +118,26 @@ class _AuthPageState extends State<AuthPage> {
                         keyboardType: TextInputType.number,
                         maxLength: 6,
                         decoration: const InputDecoration(
-                            labelText: 'Code', border: OutlineInputBorder()))
+                            labelText: 'Code'))
                   else ...[
                     if (_register) ...[
                       TextField(
                           controller: _name,
                           decoration: const InputDecoration(
-                              labelText: 'Name', border: OutlineInputBorder())),
+                              labelText: 'Name')),
                       const SizedBox(height: 12),
                     ],
                     TextField(
                         controller: _email,
                         keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
-                            labelText: 'Email', border: OutlineInputBorder())),
+                            labelText: 'Email')),
                     const SizedBox(height: 12),
                     TextField(
                         controller: _pass,
                         obscureText: _hide,
                         decoration: InputDecoration(
                             labelText: 'Password',
-                            border: const OutlineInputBorder(),
                             suffixIcon: IconButton(
                                 icon: Icon(_hide ? Icons.visibility : Icons.visibility_off),
                                 onPressed: () => setState(() => _hide = !_hide)))),

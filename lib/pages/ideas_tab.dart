@@ -93,7 +93,7 @@ class _IdeaPageState extends State<IdeaPage> {
                   child: TextField(
                       controller: _msg,
                       decoration: const InputDecoration(
-                          hintText: 'Add a note…', border: OutlineInputBorder()))),
+                          hintText: 'Add a note…'))),
               IconButton(onPressed: _send, icon: const Icon(Icons.send)),
             ]),
           ),

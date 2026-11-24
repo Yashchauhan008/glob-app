@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../theme.dart';
 
 /// Loads data, shows spinner/error/empty, supports pull-to-refresh.
 class AsyncList extends StatefulWidget {
@@ -59,7 +60,10 @@ class AsyncListState extends State<AsyncList> {
                 Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(child: Text(widget.empty))),
-              for (final r in data) widget.row(c, r, reload),
+              for (final r in data)
+                Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                    child: widget.row(c, r, reload)),
               const SizedBox(height: 80),
             ],
           ),
@@ -99,4 +103,47 @@ String shortDate(dynamic v) {
   if (v == null) return '';
   final s = '$v';
   return s.length >= 10 ? s.substring(0, 10) : s;
+}
+
+/// White rounded card.
+class GCard extends StatelessWidget {
+  final Widget child;
+  final EdgeInsets padding;
+  final Color color;
+  const GCard({super.key, required this.child, this.padding = const EdgeInsets.all(18), this.color = Colors.white});
+  @override
+  Widget build(BuildContext context) => Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(24)),
+      child: child);
+}
+
+/// Big yellow rounded panel that holds white cards.
+class Panel extends StatelessWidget {
+  final Widget child;
+  const Panel({super.key, required this.child});
+  @override
+  Widget build(BuildContext context) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: C.yellow, borderRadius: BorderRadius.circular(30)),
+      child: child);
+}
+
+class SectionTitle extends StatelessWidget {
+  final String title;
+  final String? action;
+  final VoidCallback? onAction;
+  const SectionTitle(this.title, {super.key, this.action, this.onAction});
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 10),
+      child: Row(children: [
+        Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700))),
+        if (action != null)
+          GestureDetector(
+              onTap: onAction,
+              child: Text(action!, style: const TextStyle(fontSize: 13, color: C.muted))),
+      ]));
 }

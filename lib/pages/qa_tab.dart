@@ -146,7 +146,7 @@ class _QuestionPageState extends State<QuestionPage> {
                   child: TextField(
                       controller: _ans,
                       decoration: const InputDecoration(
-                          hintText: 'Write an answer…', border: OutlineInputBorder()))),
+                          hintText: 'Write an answer…'))),
               IconButton(onPressed: _send, icon: const Icon(Icons.send)),
             ]),
           ),

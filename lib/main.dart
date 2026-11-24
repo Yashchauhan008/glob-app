@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'api.dart';
+import 'theme.dart';
 import 'pages/auth_page.dart';
 import 'pages/workspaces_page.dart';
 import 'pages/shell.dart';
@@ -33,16 +34,8 @@ class GlobApp extends StatelessWidget {
       title: 'Glob',
       navigatorKey: navKey,
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF4F46E5),
-        brightness: Brightness.light,
-      ),
-      darkTheme: ThemeData(
-        useMaterial3: true,
-        colorSchemeSeed: const Color(0xFF4F46E5),
-        brightness: Brightness.dark,
-      ),
+      theme: buildTheme(),
+      themeMode: ThemeMode.light,
       home: home,
     );
   }
