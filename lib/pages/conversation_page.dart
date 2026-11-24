@@ -29,6 +29,7 @@ class _ConversationPageState extends State<ConversationPage> {
   StreamSubscription? _sub;
   Timer? _typingOff;
   Timer? _recTick;
+  Timer? _poll;
   DateTime _lastTyping = DateTime.fromMillisecondsSinceEpoch(0);
   bool _loaded = false;
   bool _more = false;
@@ -52,6 +53,10 @@ class _ConversationPageState extends State<ConversationPage> {
     _sub = svc.events.listen(_onEvent);
     svc.addListener(_r);
     _load();
+    // when the live connection is down (or just as a safety net) ask the server for what is new
+    _poll = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!svc.connected) _refresh();
+    });
   }
 
   @override
@@ -60,6 +65,7 @@ class _ConversationPageState extends State<ConversationPage> {
     _sub?.cancel();
     _typingOff?.cancel();
     _recTick?.cancel();
+    _poll?.cancel();
     svc.removeListener(_r);
     _rec.dispose();
     _text.dispose();
@@ -96,6 +102,31 @@ class _ConversationPageState extends State<ConversationPage> {
         });
       }
     }
+  }
+
+  /// Brings in anything new (messages, delivered / seen changes) without the live connection.
+  Future<void> _refresh() async {
+    if (!_loaded) return;
+    try {
+      final r = await Api.get('$_path?limit=40');
+      final list = items(r).map(_norm).toList();
+      if (!mounted) return;
+      var fromPeer = false;
+      setState(() {
+        for (final m in list) {
+          final i = _msgs.indexWhere((x) =>
+              '${x['id']}' == '${m['id']}' || (m['client_id'] != null && '${x['client_id']}' == '${m['client_id']}'));
+          if (i >= 0) {
+            _msgs[i] = {..._msgs[i], ...m};
+          } else {
+            _msgs.add(m);
+            if ('${m['user_id']}' != '${Api.user?['id']}') fromPeer = true;
+          }
+        }
+        _msgs.sort((a, b) => '${a['created_at']}'.compareTo('${b['created_at']}'));
+      });
+      if (fromPeer) _markRead();
+    } catch (_) {}
   }
 
   Future<void> _older() async {
@@ -366,7 +397,16 @@ class _ConversationPageState extends State<ConversationPage> {
   Widget _header() {
     final online = dm && svc.online.contains(peerId);
     final name = dm ? '${widget.peer!['name']}' : 'Everyone';
-    final sub = _typing ? 'typing…' : (dm ? (online ? 'online' : 'offline') : '${svc.online.length + 1} online');
+    String sub;
+    if (_typing) {
+      sub = 'typing…';
+    } else if (!svc.connected) {
+      sub = 'Connecting…';
+    } else if (dm) {
+      sub = online ? 'Active now' : 'Offline';
+    } else {
+      sub = '${svc.online.length + 1} active';
+    }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 16, 8),
       child: Row(children: [
@@ -386,21 +426,45 @@ class _ConversationPageState extends State<ConversationPage> {
             Text(dm ? name : '${svc.inbox?['team']?['name'] ?? 'Workspace'} · everyone',
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
-            Text(sub, style: TextStyle(color: _typing ? const Color(0xFF4CC38A) : context.muted, fontSize: 12)),
+            Text(sub,
+                style: TextStyle(
+                    color: _typing || (online && svc.connected) ? const Color(0xFF4CC38A) : context.muted,
+                    fontSize: 12.5)),
           ]),
         ),
       ]),
     );
   }
 
-  String _day(DateTime d) {
+  DateTime? _t(Map<String, dynamic> m) => DateTime.tryParse('${m['created_at']}')?.toLocal();
+
+  bool _same(Map<String, dynamic>? a, Map<String, dynamic>? b) {
+    if (a == null || b == null) return false;
+    if ('${a['user_id']}' != '${b['user_id']}') return false;
+    final x = _t(a), y = _t(b);
+    if (x == null || y == null) return false;
+    return y.difference(x).inMinutes.abs() < 4 && x.day == y.day;
+  }
+
+  /// "Today 01:12", "Yesterday 22:10", "12 Nov 18:20"
+  String _stamp(DateTime d) {
     final n = DateTime.now();
-    final t = DateTime(n.year, n.month, n.day);
-    final diff = t.difference(DateTime(d.year, d.month, d.day)).inDays;
-    if (diff == 0) return 'Today';
-    if (diff == 1) return 'Yesterday';
+    final diff = DateTime(n.year, n.month, n.day).difference(DateTime(d.year, d.month, d.day)).inDays;
+    final hm = '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    if (diff == 0) return 'Today $hm';
+    if (diff == 1) return 'Yesterday $hm';
     const m = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${d.day} ${m[d.month - 1]} ${d.year}';
+    return '${d.day} ${m[d.month - 1]} $hm';
+  }
+
+  String? _statusText(Map<String, dynamic> m, {required bool isLastMine}) {
+    final st = '${m['status']}';
+    if (st == 'sending') return 'Sending…';
+    if (!dm || !isLastMine) return null; // like Instagram: the status sits under your last message only
+    if (st == 'read') return 'Seen';
+    if (st == 'delivered') return 'Delivered';
+    if (st == 'sent') return 'Sent';
+    return null;
   }
 
   Widget _list() {
@@ -410,6 +474,14 @@ class _ConversationPageState extends State<ConversationPage> {
     if (n == 0 && !_more) {
       return Center(child: Text('No messages yet. Say hi 👋', style: TextStyle(color: context.muted)));
     }
+    final myId = '${Api.user?['id']}';
+    var lastMine = -1;
+    for (var i = n - 1; i >= 0; i--) {
+      if ('${_msgs[i]['user_id']}' == myId) {
+        lastMine = i;
+        break;
+      }
+    }
     return ListView.builder(
       reverse: true,
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
@@ -417,7 +489,17 @@ class _ConversationPageState extends State<ConversationPage> {
       itemBuilder: (c, i) {
         // reversed list: 0 is the bottom (newest)
         if (_typing && i == 0) {
-          return const Align(alignment: Alignment.centerLeft, child: Padding(padding: EdgeInsets.all(8), child: _TypingDots()));
+          return Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Row(children: [
+              if (dm)
+                Avatar(id: peerId, name: '${widget.peer!['name']}', url: widget.peer!['avatar_url'] as String?, size: 28)
+              else
+                const SizedBox(width: 28),
+              const SizedBox(width: 8),
+              const _TypingDots(),
+            ]),
+          );
         }
         final k = i - (_typing ? 1 : 0);
         if (k >= n) {
@@ -425,29 +507,60 @@ class _ConversationPageState extends State<ConversationPage> {
         }
         final idx = n - 1 - k;
         final m = _msgs[idx];
-        final d = DateTime.tryParse('${m['created_at']}')?.toLocal();
-        final prev = idx > 0 ? DateTime.tryParse('${_msgs[idx - 1]['created_at']}')?.toLocal() : null;
-        final newDay = d != null && (prev == null || prev.day != d.day || prev.month != d.month || prev.year != d.year);
-        final mine = '${m['user_id']}' == '${Api.user?['id']}';
-        return Column(children: [
-          if (newDay)
+        final prev = idx > 0 ? _msgs[idx - 1] : null;
+        final next = idx < n - 1 ? _msgs[idx + 1] : null;
+        final mine = '${m['user_id']}' == myId;
+        final prevSame = _same(prev, m);
+        final nextSame = _same(m, next);
+        final d = _t(m);
+        final pd = prev == null ? null : _t(prev);
+        final showStamp = d != null && (pd == null || d.difference(pd).inMinutes > 25 || d.day != pd.day);
+        final status = mine ? _statusText(m, isLastMine: idx == lastMine) : null;
+        final failed = mine && '${m['status']}' == 'failed';
+        return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          if (showStamp)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 10),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(14)),
-                child: Text(_day(d), style: TextStyle(fontSize: 11, color: context.muted, fontWeight: FontWeight.w700)),
-              ),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Center(child: Text(_stamp(d), style: TextStyle(fontSize: 11.5, color: context.muted, fontWeight: FontWeight.w600))),
             ),
-          MsgBubble(
-            key: ValueKey('${m['client_id'] ?? m['id']}'),
-            m: m,
-            mine: mine,
-            showName: !dm && !mine,
-            onRetry: () {
-              final p = _pending['${m['client_id']}'];
-              if (p != null) _deliver(p, shown: true);
-            },
+          Padding(
+            padding: EdgeInsets.only(top: prevSame ? 2 : 8),
+            child: MsgBubble(
+              key: ValueKey('${m['client_id'] ?? m['id']}'),
+              m: m,
+              mine: mine,
+              joinedAbove: prevSame,
+              joinedBelow: nextSame,
+              showAvatar: !mine && !nextSame,
+              showName: !dm && !mine && !prevSame,
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 200),
+            child: failed
+                ? Align(
+                    alignment: Alignment.centerRight,
+                    child: GestureDetector(
+                      onTap: () {
+                        final p = _pending['${m['client_id']}'];
+                        if (p != null) _deliver(p, shown: true);
+                      },
+                      child: const Padding(
+                        padding: EdgeInsets.only(top: 3, right: 4),
+                        child: Text('Not delivered · Tap to retry',
+                            style: TextStyle(color: Color(0xFFD64545), fontSize: 11.5, fontWeight: FontWeight.w700)),
+                      ),
+                    ),
+                  )
+                : (status == null
+                    ? const SizedBox(width: double.infinity)
+                    : Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 3, right: 4),
+                          child: Text(status, style: TextStyle(color: context.muted, fontSize: 11.5)),
+                        ),
+                      )),
           ),
         ]);
       },
@@ -557,8 +670,8 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
 
   @override
   Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(18)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        decoration: BoxDecoration(color: theirBubble(context), borderRadius: BorderRadius.circular(20)),
         child: AnimatedBuilder(
           animation: _c,
           builder: (_, __) => Row(mainAxisSize: MainAxisSize.min, children: [
@@ -576,158 +689,158 @@ class _TypingDotsState extends State<_TypingDots> with SingleTickerProviderState
       );
 }
 
-/// One message: picture, video, voice note, document or text, with WhatsApp-style ticks.
+Color theirBubble(BuildContext c) => c.isDark ? const Color(0xFF2A2A30) : const Color(0xFFE8E8EE);
+
+const _mineGradient = LinearGradient(
+  colors: [Color(0xFF7B61FF), Color(0xFF3F6DFF)],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
+/// One message in the Instagram style: a bubble that fits its text, tight when the same person sends several,
+/// their picture only beside the last one of a group.
 class MsgBubble extends StatelessWidget {
   final Map<String, dynamic> m;
   final bool mine;
+  final bool joinedAbove;
+  final bool joinedBelow;
+  final bool showAvatar;
   final bool showName;
-  final VoidCallback onRetry;
-  const MsgBubble({super.key, required this.m, required this.mine, required this.showName, required this.onRetry});
+  const MsgBubble({
+    super.key,
+    required this.m,
+    required this.mine,
+    required this.joinedAbove,
+    required this.joinedBelow,
+    required this.showAvatar,
+    required this.showName,
+  });
 
-  Widget _ticks(BuildContext c) {
-    final s = '${m['status']}';
-    const grey = Color(0x99000000);
-    switch (s) {
-      case 'sending':
-        return const Icon(Icons.access_time, size: 13, color: grey);
-      case 'sent':
-        return const Icon(Icons.done, size: 16, color: grey);
-      case 'delivered':
-        return const Icon(Icons.done_all, size: 16, color: grey);
-      case 'read':
-        return const Icon(Icons.done_all, size: 16, color: Color(0xFF2F8FE8));
-      case 'failed':
-        return GestureDetector(
-          onTap: onRetry,
-          child: const Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.error_outline, size: 15, color: Color(0xFFD64545)),
-            SizedBox(width: 2),
-            Text('Retry', style: TextStyle(color: Color(0xFFD64545), fontSize: 11, fontWeight: FontWeight.w800)),
-          ]),
-        );
-      default:
-        return const SizedBox.shrink();
-    }
-  }
-
-  Widget _content(BuildContext c, Color fg) {
+  Widget _content(BuildContext c, Color fg, {required bool bare}) {
     final kind = '${m['kind']}';
     final url = '${m['file_url'] ?? ''}';
     final body = '${m['body'] ?? ''}';
     switch (kind) {
       case 'image':
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
           GestureDetector(
             onTap: () => Navigator.of(c).push(MaterialPageRoute(builder: (_) => _PhotoPage(url: url))),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.network(url, width: 230, fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const SizedBox(width: 230, height: 120, child: Icon(Icons.broken_image_outlined))),
+              borderRadius: BorderRadius.circular(18),
+              child: Image.network(url, width: 220, fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox(width: 220, height: 120, child: Icon(Icons.broken_image_outlined))),
             ),
           ),
-          if (body.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 6), child: Text(body, style: TextStyle(color: fg))),
+          if (body.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+              child: Text(body, style: TextStyle(color: fg, fontSize: 15)),
+            ),
         ]);
       case 'video':
         return GestureDetector(
           onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
           child: Container(
-            width: 230,
-            height: 130,
-            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(16)),
+            width: 220,
+            height: 124,
+            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(18)),
             child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 46),
+              Icon(Icons.play_circle_fill_rounded, color: Colors.white, size: 44),
               SizedBox(height: 4),
               Text('Play video', style: TextStyle(color: Colors.white70, fontSize: 12)),
             ]),
           ),
         );
       case 'audio':
-        return _VoiceBubble(url: url, durationMs: (m['duration_ms'] as num?)?.toInt() ?? 0, color: fg);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(10, 8, 14, 8),
+          child: _VoiceBubble(url: url, durationMs: (m['duration_ms'] as num?)?.toInt() ?? 0, color: fg),
+        );
       case 'file':
         return GestureDetector(
           onTap: () => launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication),
-          child: Container(
-            width: 220,
+          child: Padding(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.black.withAlpha(18), borderRadius: BorderRadius.circular(14)),
-            child: Row(children: [
-              Icon(Icons.insert_drive_file_rounded, color: fg),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text('${m['file_name'] ?? 'Document'}', maxLines: 2, overflow: TextOverflow.ellipsis,
+            child: SizedBox(
+              width: 200,
+              child: Row(children: [
+                Icon(Icons.insert_drive_file_rounded, color: fg),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text('${m['file_name'] ?? 'Document'}',
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 13)),
-                  Text('Tap to open', style: TextStyle(color: fg.withAlpha(150), fontSize: 11)),
-                ]),
-              ),
-              Icon(Icons.download_rounded, color: fg, size: 18),
-            ]),
+                ),
+                Icon(Icons.download_rounded, color: fg, size: 18),
+              ]),
+            ),
           ),
         );
       default:
-        return Text(body, style: TextStyle(color: fg, fontSize: 15, height: 1.3));
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          child: Text(body, style: TextStyle(color: fg, fontSize: 15.5, height: 1.25)),
+        );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final bg = mine ? C.blue : context.cardBg;
-    final fg = mine ? C.dark : context.ink;
-    final bubble = Container(
-      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.72),
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 6),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.only(
-          topLeft: const Radius.circular(22),
-          topRight: const Radius.circular(22),
-          bottomLeft: Radius.circular(mine ? 22 : 6),
-          bottomRight: Radius.circular(mine ? 6 : 22),
-        ),
-        boxShadow: const [BoxShadow(color: Color(0x0F000000), blurRadius: 6, offset: Offset(0, 2))],
+    final kind = '${m['kind']}';
+    final bareMedia = (kind == 'image' && '${m['body'] ?? ''}'.isEmpty) || kind == 'video';
+    final fg = mine ? Colors.white : context.ink;
+    const big = Radius.circular(22);
+    const small = Radius.circular(6);
+    // the corner that touches the neighbouring bubble of the same person gets tighter
+    final radius = BorderRadius.only(
+      topLeft: !mine && joinedAbove ? small : big,
+      bottomLeft: !mine && joinedBelow ? small : big,
+      topRight: mine && joinedAbove ? small : big,
+      bottomRight: mine && joinedBelow ? small : big,
+    );
+    final bubble = ConstrainedBox(
+      constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.74),
+      child: Container(
+        decoration: bareMedia
+            ? null
+            : BoxDecoration(
+                color: mine ? null : theirBubble(context),
+                gradient: mine ? _mineGradient : null,
+                borderRadius: radius,
+              ),
+        child: ClipRRect(borderRadius: radius, child: _content(context, fg, bare: bareMedia)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
-        if (showName)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 3),
-            child: Text('${m['name'] ?? ''}',
-                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF7A6AE0))),
+    );
+    final row = Row(
+      mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (!mine) ...[
+          SizedBox(
+            width: 28,
+            child: showAvatar
+                ? Avatar(id: '${m['user_id']}', name: '${m['name'] ?? '?'}', url: m['avatar_url'] as String?, size: 28)
+                : null,
           ),
-        _content(context, fg),
-        const SizedBox(height: 3),
-        Align(
-          alignment: Alignment.centerRight,
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Text(clockOf(m['created_at']), style: TextStyle(fontSize: 10.5, color: fg.withAlpha(140))),
-            if (mine) ...[const SizedBox(width: 4), _ticks(context)],
-          ]),
-        ),
-      ]),
+          const SizedBox(width: 8),
+        ],
+        Flexible(child: bubble),
+      ],
     );
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 220),
+      duration: const Duration(milliseconds: 200),
       curve: Curves.easeOutCubic,
-      builder: (_, v, child) => Opacity(opacity: v, child: Transform.translate(offset: Offset(0, (1 - v) * 10), child: child)),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(
-          mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            if (!mine) ...[
-              Avatar(id: '${m['user_id']}', name: '${m['name'] ?? '?'}', url: m['avatar_url'] as String?, size: 30),
-              const SizedBox(width: 8),
-            ],
-            bubble,
-            if (mine) ...[
-              const SizedBox(width: 8),
-              Avatar(id: '${m['user_id']}', name: '${m['name'] ?? '?'}',
-                  url: (m['avatar_url'] ?? Api.user?['avatar_url']) as String?, size: 30),
-            ],
-          ],
-        ),
-      ),
+      builder: (_, v, child) => Opacity(opacity: v, child: Transform.translate(offset: Offset(0, (1 - v) * 8), child: child)),
+      child: Column(crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start, children: [
+        if (showName)
+          Padding(
+            padding: const EdgeInsets.only(left: 36, bottom: 3),
+            child: Text('${m['name'] ?? ''}',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: context.muted)),
+          ),
+        row,
+      ]),
     );
   }
 }

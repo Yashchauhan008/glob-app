@@ -150,7 +150,9 @@ class _ChatTabState extends State<ChatTab> {
         padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
         children: [
           Row(children: [
-            Expanded(child: Text('Create a message', style: TextStyle(color: context.muted, fontSize: 14))),
+            Expanded(
+                child: Text(svc.connected ? 'Create a message' : 'Connecting…',
+                    style: TextStyle(color: context.muted, fontSize: 14))),
             GestureDetector(
               onTap: _newMessage,
               child: Container(

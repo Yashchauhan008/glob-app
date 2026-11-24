@@ -43,6 +43,8 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
   Set<String> online = {};
   int notifUnread = 0;
   Timer? _debounce;
+  Timer? _tick;
+  String lastError = '';
 
   final _ev = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get events => _ev.stream;
@@ -76,21 +78,39 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
     return null;
   }
 
+  /// Starts everything: the live connection, and the counts that do not need it.
+  /// Unread labels and notification counts load straight away and refresh every 20 seconds and whenever the app
+  /// comes back, so they are right even when the live connection is slow or down.
+  void start() {
+    connect();
+    loadInbox();
+    loadNotifUnread();
+    _tick ??= Timer.periodic(const Duration(seconds: 20), (_) {
+      if (_s != null && !connected) _s!.connect();
+      loadInbox();
+      loadNotifUnread();
+    });
+  }
+
   void connect() {
     if (_s != null || Api.token == null || Api.teamId == null) return;
     WidgetsBinding.instance.addObserver(this);
     final s = sio.io(
       kApiUrl,
       sio.OptionBuilder()
-          .setTransports(['polling', 'websocket'])
+          .setTransports(['websocket'])
           .setAuth({'token': 'Bearer ${Api.token}', 'teamId': Api.teamId})
           .enableForceNew()
           .enableReconnection()
+          .setReconnectionDelay(1500)
+          .setReconnectionDelayMax(8000)
+          .setTimeout(10000)
           .build(),
     );
     _s = s;
     s.onConnect((_) {
       connected = true;
+      lastError = '';
       s.emit('presence:route', {'route': '/messages'});
       loadInbox();
       loadNotifUnread();
@@ -100,8 +120,13 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       connected = false;
       notifyListeners();
     });
-    s.onConnectError((_) {
+    s.onConnectError((e) {
       connected = false;
+      lastError = '$e';
+      notifyListeners();
+    });
+    s.onError((e) {
+      lastError = '$e';
     });
     s.on('presence:hello', (_) => s.emit('presence:route', {'route': '/messages'}));
     s.on('presence:roster', (d) {
@@ -195,16 +220,32 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  void markRead({String? dmWith}) {
-    if (dmWith != null) {
-      _s?.emit('dm:read', {'with': dmWith});
+  /// The chat on screen was read. Uses an ordinary request (the live connection may be down) and clears the
+  /// count on screen immediately, so the label never lingers.
+  Future<void> markRead({String? dmWith}) async {
+    _clearUnreadLocally(dmWith);
+    try {
+      await Api.post(dmWith != null ? '/chat/dm/$dmWith/read' : '/chat/read');
+    } catch (_) {}
+    loadInbox();
+    loadNotifUnread();
+  }
+
+  void _clearUnreadLocally(String? dmWith) {
+    final ib = inbox;
+    if (ib == null) return;
+    if (dmWith == null) {
+      final ws = ib['workspace'];
+      if (ws is Map) ws['unread'] = 0;
     } else {
-      _s?.emit('chat:read');
+      final dms = ib['dms'];
+      if (dms is List) {
+        for (final d in dms) {
+          if (d is Map && d['user'] is Map && '${d['user']['id']}' == dmWith) d['unread'] = 0;
+        }
+      }
     }
-    Future.delayed(const Duration(milliseconds: 600), () {
-      loadInbox();
-      loadNotifUnread();
-    });
+    notifyListeners();
   }
 
   void typing({String? to}) {
@@ -226,6 +267,8 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void disconnect() {
+    _tick?.cancel();
+    _tick = null;
     WidgetsBinding.instance.removeObserver(this);
     _s?.dispose();
     _s = null;

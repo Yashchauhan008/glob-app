@@ -65,7 +65,7 @@ class _ShellState extends State<Shell> {
     call.addListener(_r);
     chat.addListener(_r);
     NavIntent.notifier.addListener(_onIntent);
-    chat.connect();
+    chat.start();
     Notify.I.init().then((_) => Notify.I.requestPermission());
     Push.register();
     WidgetsBinding.instance.addPostFrameCallback((_) {
