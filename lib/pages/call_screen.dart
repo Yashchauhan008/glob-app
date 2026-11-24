@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:livekit_client/livekit_client.dart';
 import '../api.dart';
@@ -89,7 +90,8 @@ class _CallScreenState extends State<CallScreen> with SingleTickerProviderStateM
     final name = isMe ? 'You' : (p.name.isNotEmpty ? p.name : 'Guest');
     final v = _video(p, screen: false);
     final info = ChatService.I.personById(p.identity);
-    final url = (isMe ? Api.user?['avatar_url'] : info?['avatar_url']) as String?;
+    final dynamic rawUrl = isMe ? (Api.user)?['avatar_url'] : (info)?['avatar_url'];
+    final String? url = rawUrl is String ? rawUrl : null;
     final hand = p.attributes['hand'] == '1';
     return AnimatedContainer(
       duration: const Duration(milliseconds: 220),
