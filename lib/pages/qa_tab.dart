@@ -83,6 +83,7 @@ class _QuestionPageState extends State<QuestionPage> {
               icon: const Icon(Icons.delete_outline),
               onPressed: () async {
                 final nav = Navigator.of(context);
+                if (!await confirmDelete(context, 'this question')) return;
                 try {
                   await Api.del('/questions/${widget.q['id']}');
                   nav.pop();

@@ -3,6 +3,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../api.dart';
 import 'workspaces_page.dart';
 import '../theme.dart';
+import 'common.dart';
 
 class AuthPage extends StatefulWidget {
   const AuthPage({super.key});
@@ -92,6 +93,8 @@ class _AuthPageState extends State<AuthPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  const Align(alignment: Alignment.centerRight, child: ThemeToggle()),
+                  const SizedBox(height: 8),
                   Row(children: [
                     Container(
                         width: 52,

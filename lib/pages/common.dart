@@ -60,10 +60,12 @@ class AsyncListState extends State<AsyncList> {
                 Padding(
                     padding: const EdgeInsets.all(32),
                     child: Center(child: Text(widget.empty))),
-              for (final r in data)
-                Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    child: widget.row(c, r, reload)),
+              for (var k = 0; k < data.length; k++)
+                FadeIn(
+                    index: k,
+                    child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        child: widget.row(c, data[k], reload))),
               const SizedBox(height: 80),
             ],
           ),
@@ -105,31 +107,81 @@ String shortDate(dynamic v) {
   return s.length >= 10 ? s.substring(0, 10) : s;
 }
 
-/// White rounded card.
+/// Asks before anything is deleted.
+Future<bool> confirmDelete(BuildContext context, String what) async {
+  final r = await showDialog<bool>(
+    context: context,
+    builder: (d) => AlertDialog(
+      title: const Text('Delete?'),
+      content: Text('Delete $what? This cannot be undone.'),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(d, false), child: const Text('Cancel')),
+        FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFFD64545), foregroundColor: Colors.white),
+            onPressed: () => Navigator.pop(d, true),
+            child: const Text('Delete')),
+      ],
+    ),
+  );
+  return r == true;
+}
+
+/// Fades and slides its child in; `index` staggers a list.
+class FadeIn extends StatelessWidget {
+  final Widget child;
+  final int index;
+  const FadeIn({super.key, required this.child, this.index = 0});
+  @override
+  Widget build(BuildContext context) {
+    final ms = 320 + (index > 8 ? 8 : index) * 55;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: 1),
+      duration: Duration(milliseconds: ms),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, c) =>
+          Opacity(opacity: v, child: Transform.translate(offset: Offset(0, (1 - v) * 18), child: c)),
+      child: child,
+    );
+  }
+}
+
+/// White (or dark-mode) rounded card.
 class GCard extends StatelessWidget {
   final Widget child;
   final EdgeInsets padding;
-  final Color color;
-  const GCard({super.key, required this.child, this.padding = const EdgeInsets.all(18), this.color = Colors.white});
+  const GCard({super.key, required this.child, this.padding = const EdgeInsets.all(18)});
   @override
   Widget build(BuildContext context) => Container(
       width: double.infinity,
       padding: padding,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(28)),
+      decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(28)),
       child: child);
 }
 
-/// Big yellow rounded panel that holds white cards.
-class Panel extends StatelessWidget {
-  final Widget child;
+/// Pastel block. Text and icons inside stay dark so they read in light and dark mode.
+class Pastel extends StatelessWidget {
   final Color color;
-  const Panel({super.key, required this.child, this.color = C.blue});
+  final Widget child;
+  final EdgeInsets padding;
+  final double radius;
+  final bool expand;
+  const Pastel(
+      {super.key,
+      required this.color,
+      required this.child,
+      this.padding = const EdgeInsets.all(16),
+      this.radius = 28,
+      this.expand = true});
   @override
-  Widget build(BuildContext context) => Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(30)),
-      child: child);
+  Widget build(BuildContext context) => AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      width: expand ? double.infinity : null,
+      padding: padding,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(radius)),
+      child: DefaultTextStyle.merge(
+          style: const TextStyle(color: C.dark),
+          child: IconTheme.merge(data: const IconThemeData(color: C.dark), child: child)));
 }
 
 class SectionTitle extends StatelessWidget {
@@ -144,30 +196,37 @@ class SectionTitle extends StatelessWidget {
         Expanded(child: Text(title, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800))),
         if (action != null)
           GestureDetector(
-              onTap: onAction,
-              child: Text(action!, style: const TextStyle(fontSize: 13, color: C.muted))),
+              onTap: onAction, child: Text(action!, style: TextStyle(fontSize: 13, color: context.muted))),
       ]));
 }
 
-/// Round white icon button, like the bell / back buttons in the design.
+/// Round icon button, like the bell / back buttons in the design.
 class RoundBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onTap;
-  final Color color;
-  final Color iconColor;
   final double size;
-  const RoundBtn(this.icon,
-      {super.key, this.onTap, this.color = Colors.white, this.iconColor = C.ink, this.size = 46});
+  const RoundBtn(this.icon, {super.key, this.onTap, this.size = 46});
   @override
   Widget build(BuildContext context) => GestureDetector(
       onTap: onTap,
-      child: Container(
+      child: AnimatedContainer(
+          duration: const Duration(milliseconds: 250),
           width: size,
           height: size,
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle, boxShadow: const [
+          decoration: BoxDecoration(color: context.cardBg, shape: BoxShape.circle, boxShadow: const [
             BoxShadow(color: Color(0x12000000), blurRadius: 10, offset: Offset(0, 3))
           ]),
-          child: Icon(icon, color: iconColor, size: size * 0.45)));
+          child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 250),
+              child: Icon(icon, key: ValueKey(icon), color: context.ink, size: size * 0.45))));
+}
+
+class ThemeToggle extends StatelessWidget {
+  const ThemeToggle({super.key});
+  @override
+  Widget build(BuildContext context) => RoundBtn(
+      context.isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+      onTap: () => ThemeController.toggle(context));
 }
 
 /// Small coloured pill label.
@@ -181,25 +240,33 @@ class Tag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
       decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(20)),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        if (icon != null) ...[Icon(icon, size: 14), const SizedBox(width: 6)],
-        Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+        if (icon != null) ...[Icon(icon, size: 14, color: C.dark), const SizedBox(width: 6)],
+        Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: C.dark)),
       ]));
 }
 
-/// Half-circle gauge with a percentage inside the arc.
+/// Half-circle gauge; the arc grows in when it appears.
 class Gauge extends StatelessWidget {
   final double value; // 0..1
   final Color color;
   const Gauge({super.key, required this.value, required this.color});
   @override
-  Widget build(BuildContext context) =>
-      CustomPaint(size: const Size(84, 46), painter: _GaugePainter(value.clamp(0, 1).toDouble(), color));
+  Widget build(BuildContext context) {
+    final track = context.isDark ? const Color(0xFF34343A) : const Color(0xFFE6E6EA);
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0, end: value.clamp(0, 1).toDouble()),
+      duration: const Duration(milliseconds: 900),
+      curve: Curves.easeOutCubic,
+      builder: (_, v, __) => CustomPaint(size: const Size(84, 46), painter: _GaugePainter(v, color, track)),
+    );
+  }
 }
 
 class _GaugePainter extends CustomPainter {
   final double v;
   final Color color;
-  _GaugePainter(this.v, this.color);
+  final Color track;
+  _GaugePainter(this.v, this.color, this.track);
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(6, 6, size.width - 12, size.width - 12);
@@ -207,7 +274,7 @@ class _GaugePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 9
       ..strokeCap = StrokeCap.round
-      ..color = const Color(0xFFE6E6EA);
+      ..color = track;
     final fg = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 9
@@ -218,5 +285,5 @@ class _GaugePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _GaugePainter o) => o.v != v || o.color != color;
+  bool shouldRepaint(covariant _GaugePainter o) => o.v != v || o.color != color || o.track != track;
 }

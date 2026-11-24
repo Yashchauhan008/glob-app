@@ -72,6 +72,7 @@ class _TasksTabState extends State<TasksTab> {
               trailing: IconButton(
                 icon: const Icon(Icons.delete_outline),
                 onPressed: () async {
+                  if (!await confirmDelete(c, '“${t['title']}”')) return;
                   try {
                     await Api.del('/todos/${t['id']}');
                   } catch (e) {

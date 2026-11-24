@@ -10,6 +10,7 @@ final navKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Api.init();
+  await ThemeController.load();
   Api.onSignedOut = () {
     navKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthPage()), (_) => false);
@@ -30,13 +31,19 @@ class GlobApp extends StatelessWidget {
     } else {
       home = const Shell();
     }
-    return MaterialApp(
-      title: 'Glob',
-      navigatorKey: navKey,
-      debugShowCheckedModeBanner: false,
-      theme: buildTheme(),
-      themeMode: ThemeMode.light,
-      home: home,
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: ThemeController.mode,
+      builder: (_, mode, __) => MaterialApp(
+        title: 'Glob',
+        navigatorKey: navKey,
+        debugShowCheckedModeBanner: false,
+        theme: buildTheme(false),
+        darkTheme: buildTheme(true),
+        themeMode: mode,
+        themeAnimationDuration: const Duration(milliseconds: 350),
+        themeAnimationCurve: Curves.easeInOut,
+        home: home,
+      ),
     );
   }
 }

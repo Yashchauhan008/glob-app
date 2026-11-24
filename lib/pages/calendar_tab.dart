@@ -161,6 +161,7 @@ class _CalendarTabState extends State<CalendarTab> {
                   ? IconButton(
                       icon: const Icon(Icons.delete_outline),
                       onPressed: () async {
+                        if (!await confirmDelete(c, '“${i.title}”')) return;
                         try {
                           await Api.del('/events/${i.id}');
                         } catch (e) {

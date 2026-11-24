@@ -75,6 +75,7 @@ class _MapTabState extends State<MapTab> {
               TextButton.icon(
                   onPressed: () async {
                     Navigator.pop(c);
+                    if (!mounted || !await confirmDelete(context, 'this pin')) return;
                     try {
                       await Api.del('/pins/${e['id']}');
                     } catch (er) {
