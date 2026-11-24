@@ -40,7 +40,7 @@ class _CallTabState extends State<CallTab> {
   VideoTrack? _video(Participant p) {
     for (final pub in p.videoTrackPublications) {
       final t = pub.track;
-      if (t != null && !pub.muted) return t;
+      if (t is VideoTrack && !pub.muted) return t;
     }
     return null;
   }
