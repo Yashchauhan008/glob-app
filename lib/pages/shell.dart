@@ -247,9 +247,13 @@ class _ShellState extends State<Shell> {
                 tileColor: Colors.transparent,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(22)))),
             child: ListView(padding: const EdgeInsets.all(12), children: [
-              const Padding(
-                  padding: EdgeInsets.fromLTRB(12, 12, 12, 16),
-                  child: Text('Glob', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800))),
+              Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 16),
+                  child: Row(children: [
+                    Image.asset('assets/logo.png', width: 40, height: 40),
+                    const SizedBox(width: 10),
+                    const Text('Glob', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+                  ])),
               for (var k = 0; k < all.length; k++)
                 ListTile(
                   leading: Icon(all[k].icon),

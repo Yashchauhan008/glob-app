@@ -96,13 +96,7 @@ class _AuthPageState extends State<AuthPage> {
                   const Align(alignment: Alignment.centerRight, child: ThemeToggle()),
                   const SizedBox(height: 8),
                   Row(children: [
-                    Container(
-                        width: 52,
-                        height: 52,
-                        decoration: const BoxDecoration(color: C.coral, shape: BoxShape.circle),
-                        alignment: Alignment.center,
-                        child: const Text('G',
-                            style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800))),
+                    Image.asset('assets/logo.png', width: 56, height: 56),
                     const SizedBox(width: 12),
                     const Text('Glob', style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
                   ]),

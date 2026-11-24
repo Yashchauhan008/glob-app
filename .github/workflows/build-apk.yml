@@ -101,7 +101,7 @@ jobs:
           $BT/zipalign -f -p 4 unsigned.apk aligned.apk
           $BT/apksigner sign --ks "$RUNNER_TEMP/release.p12" --ks-type pkcs12 \
             --ks-key-alias "$KEY_ALIAS" --ks-pass env:KS_PASS --key-pass env:KS_PASS \
-            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --min-sdk-version 21 --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
             --out glob.apk aligned.apk
           $BT/apksigner verify -v --print-certs glob.apk | head -12
           $BT/aapt2 dump badging glob.apk | grep -E "package:|sdkVersion|targetSdk|native-code|compileSdk" || true
