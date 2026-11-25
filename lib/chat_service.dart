@@ -30,6 +30,9 @@ Map<String, dynamic> fromDm(Map<String, dynamic> m) => {
       'created_at': m['created_at'],
       'status': m['status'],
       'to': m['recipient_id'],
+      'reply_to_id': m['reply_to_id'],
+      'reply': m['reply'],
+      'reactions': m['reactions'] ?? [],
     };
 
 /// The live connection: messages, delivery ticks, typing, who is online and notifications.
@@ -151,6 +154,9 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       _ev.add({'t': 'status', 'm': normMap(d)});
       _soon();
     });
+    s.on('message:reaction', (d) {
+      _ev.add({'t': 'reaction', 'm': normMap(d)});
+    });
     s.on('dm:typing', (d) => _ev.add({'t': 'dmtyping', 'm': normMap(d)}));
     s.on('chat:typing', (d) => _ev.add({'t': 'chattyping', 'm': normMap(d)}));
     s.on('call:incoming', (d) => _ev.add({'t': 'call_incoming', 'm': normMap(d)}));
@@ -227,6 +233,23 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       return normMap(r);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Sets (or with a null emoji, takes back) my reaction on a message. Returns false when it did not go through.
+  Future<bool> react(String messageId, String? emoji) async {
+    if (connected && _s != null) {
+      final c = Completer<bool>();
+      _s!.emitWithAck('message:react', {'id': messageId, 'emoji': emoji}, ack: (r) {
+        if (!c.isCompleted) c.complete(normMap(r)['ok'] == true);
+      });
+      return c.future.timeout(const Duration(seconds: 8), onTimeout: () => false);
+    }
+    try {
+      await Api.post('/chat/react', {'message_id': messageId, 'emoji': emoji});
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 

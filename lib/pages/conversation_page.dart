@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -27,6 +28,9 @@ class _ConversationPageState extends State<ConversationPage> {
   final _rec = AudioRecorder();
   final List<Map<String, dynamic>> _msgs = [];
   final Map<String, Map<String, dynamic>> _pending = {};
+  final Map<String, Map<String, dynamic>> _replySnap = {}; // the quote on a message that is still sending
+  Map<String, dynamic>? _replyTo; // the message the person is answering
+  final _input = FocusNode();
   StreamSubscription? _sub;
   Timer? _typingOff;
   Timer? _recTick;
@@ -73,6 +77,7 @@ class _ConversationPageState extends State<ConversationPage> {
     CallService.I.removeListener(_r);
     _rec.dispose();
     _text.dispose();
+    _input.dispose();
     super.dispose();
   }
 
@@ -197,6 +202,12 @@ class _ConversationPageState extends State<ConversationPage> {
           }
         });
         break;
+      case 'reaction':
+        final id = '${m['id']}';
+        final list = m['reactions'] is List ? m['reactions'] as List : [];
+        final i = _msgs.indexWhere((x) => '${x['id']}' == id);
+        if (i >= 0) setState(() => _msgs[i] = {..._msgs[i], 'reactions': list});
+        break;
       case 'dmtyping':
         if (dm && '${m['from']}' == peerId) _showTyping();
         break;
@@ -238,6 +249,9 @@ class _ConversationPageState extends State<ConversationPage> {
             'duration_ms': p['duration_ms'],
             'created_at': DateTime.now().toUtc().toIso8601String(),
             'status': 'sending',
+            'reply_to_id': p['reply_to_id'],
+            'reply': _replySnap[cid],
+            'reactions': [],
           }));
     } else {
       _patch(cid, {'status': 'sending'});
@@ -248,6 +262,7 @@ class _ConversationPageState extends State<ConversationPage> {
       _patch(cid, {'status': 'failed'});
     } else {
       _pending.remove(cid);
+      _replySnap.remove(cid);
       final n = _norm(saved);
       _patch(cid, {...n, 'status': dm ? (n['status'] ?? 'sent') : 'sent'});
     }
@@ -263,8 +278,132 @@ class _ConversationPageState extends State<ConversationPage> {
     final t = _text.text.trim();
     if (t.isEmpty) return;
     _text.clear();
+    final cid = _cid();
+    final reply = _takeReply(cid);
     setState(() {});
-    _deliver({'body': t, 'kind': 'text', 'client_id': _cid()});
+    _deliver({'body': t, 'kind': 'text', 'client_id': cid, if (reply != null) 'reply_to_id': reply});
+  }
+
+  /// The reply being written goes with the next message; returns its id (and remembers the quote to show meanwhile).
+  String? _takeReply(String cid) {
+    final r = _replyTo;
+    if (r == null || '${r['id']}'.startsWith('local-')) {
+      _replyTo = null;
+      return null;
+    }
+    _replySnap[cid] = {
+      'id': r['id'],
+      'user_id': r['user_id'],
+      'name': r['name'],
+      'body': r['body'],
+      'kind': r['kind'],
+      'file_name': r['file_name'],
+      'duration_ms': r['duration_ms'],
+    };
+    _replyTo = null;
+    return '${r['id']}';
+  }
+
+  void _startReply(Map<String, dynamic> m) {
+    if ('${m['id']}'.startsWith('local-') || '${m['kind']}' == 'call') return;
+    HapticFeedback.selectionClick();
+    setState(() => _replyTo = m);
+    _input.requestFocus();
+  }
+
+  /// Taps the same emoji again to take it back. Shown at once; the server's answer is the truth.
+  Future<void> _react(Map<String, dynamic> m, String emoji) async {
+    final id = '${m['id']}';
+    if (id.startsWith('local-') || '${m['kind']}' == 'call') return;
+    final me = '${Api.user?['id']}';
+    final old = (m['reactions'] is List ? m['reactions'] as List : []).whereType<Map>().toList();
+    final had = old.where((r) => '${r['user_id']}' == me).map((r) => '${r['emoji']}').firstOrNull;
+    final next = had == emoji ? null : emoji;
+    void apply(List list) {
+      final i = _msgs.indexWhere((x) => '${x['id']}' == id);
+      if (i >= 0) setState(() => _msgs[i] = {..._msgs[i], 'reactions': list});
+    }
+
+    apply([
+      ...old.where((r) => '${r['user_id']}' != me),
+      if (next != null) {'user_id': me, 'emoji': next},
+    ]);
+    HapticFeedback.lightImpact();
+    final ok = await svc.react(id, next);
+    if (!ok && mounted) apply(old);
+  }
+
+  /// Press and hold on a message: pick an emoji, reply or copy.
+  void _menu(Map<String, dynamic> m) {
+    if ('${m['kind']}' == 'call' || '${m['id']}'.startsWith('local-')) return;
+    HapticFeedback.mediumImpact();
+    final me = '${Api.user?['id']}';
+    final mineNow = (m['reactions'] is List ? m['reactions'] as List : [])
+        .whereType<Map>()
+        .where((r) => '${r['user_id']}' == me)
+        .map((r) => '${r['emoji']}')
+        .firstOrNull;
+    const quick = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+    const more = ['🔥', '🎉', '👏', '😍', '🤔', '👀', '✅', '💯', '😅', '🙌'];
+    showModalBottomSheet(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 14, 12, 10),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
+              for (final e in quick)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(c);
+                    _react(m, e);
+                  },
+                  child: Container(
+                    width: 46,
+                    height: 46,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                        shape: BoxShape.circle, color: mineNow == e ? C.lilac.withAlpha(120) : Colors.transparent),
+                    child: Text(e, style: const TextStyle(fontSize: 27)),
+                  ),
+                ),
+            ]),
+            const SizedBox(height: 6),
+            Wrap(alignment: WrapAlignment.center, children: [
+              for (final e in more)
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(c);
+                    _react(m, e);
+                  },
+                  child: Padding(padding: const EdgeInsets.all(8), child: Text(e, style: const TextStyle(fontSize: 24))),
+                ),
+            ]),
+            const Divider(height: 18),
+            ListTile(
+              tileColor: Colors.transparent,
+              leading: const Icon(Icons.reply_rounded),
+              title: const Text('Reply', style: TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () {
+                Navigator.pop(c);
+                _startReply(m);
+              },
+            ),
+            if ('${m['kind']}' == 'text' || ('${m['body'] ?? ''}').isNotEmpty)
+              ListTile(
+                tileColor: Colors.transparent,
+                leading: const Icon(Icons.copy_rounded),
+                title: const Text('Copy', style: TextStyle(fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(c);
+                  Clipboard.setData(ClipboardData(text: '${m['body'] ?? ''}'));
+                  toast(context, 'Copied');
+                },
+              ),
+          ]),
+        ),
+      ),
+    );
   }
 
   void _onChanged(String _) {
@@ -282,13 +421,16 @@ class _ConversationPageState extends State<ConversationPage> {
     });
     try {
       final up = await Api.upload(path, name);
+      final cid = _cid();
+      final reply = _takeReply(cid);
       await _deliver({
         'kind': up['kind'],
         'file_url': up['url'],
         'file_name': up['name'],
         'mime': up['mime'],
         if (durationMs != null) 'duration_ms': durationMs,
-        'client_id': _cid(),
+        'client_id': cid,
+        if (reply != null) 'reply_to_id': reply,
       });
     } catch (e) {
       if (mounted) setState(() => _err = '$e');
@@ -654,6 +796,11 @@ class _ConversationPageState extends State<ConversationPage> {
               joinedBelow: nextSame,
               showAvatar: !mine && !nextSame,
               showName: !dm && !mine && !prevSame,
+              myId: myId,
+              onReply: () => _startReply(m),
+              onMenu: () => _menu(m),
+              onLike: () => _react(m, '❤️'),
+              onReact: (e) => _react(m, e),
             ),
           ),
           AnimatedSize(
@@ -715,8 +862,9 @@ class _ConversationPageState extends State<ConversationPage> {
       );
     }
     final hasText = _text.text.trim().isNotEmpty;
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 4, 12, 10),
+    final reply = _replyTo;
+    final bar = Container(
+      margin: EdgeInsets.fromLTRB(12, reply == null ? 4 : 0, 12, 10),
       padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
       decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(30)),
       child: Row(children: [
@@ -724,6 +872,7 @@ class _ConversationPageState extends State<ConversationPage> {
         Expanded(
           child: TextField(
             controller: _text,
+            focusNode: _input,
             onChanged: _onChanged,
             minLines: 1,
             maxLines: 4,
@@ -753,6 +902,28 @@ class _ConversationPageState extends State<ConversationPage> {
         ),
       ]),
     );
+    if (reply == null) return bar;
+    final mineReply = '${reply['user_id']}' == '${Api.user?['id']}';
+    return Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(
+        margin: const EdgeInsets.fromLTRB(12, 4, 12, 4),
+        padding: const EdgeInsets.fromLTRB(14, 8, 4, 8),
+        decoration: BoxDecoration(color: context.cardBg, borderRadius: BorderRadius.circular(20)),
+        child: Row(children: [
+          Container(width: 3, height: 34, decoration: BoxDecoration(color: const Color(0xFF7B61FF), borderRadius: BorderRadius.circular(2))),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Replying to ${mineReply ? 'yourself' : reply['name']}',
+                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5, color: Color(0xFF7B61FF))),
+              Text(previewOf(reply), maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: context.muted, fontSize: 13)),
+            ]),
+          ),
+          IconButton(onPressed: () => setState(() => _replyTo = null), icon: const Icon(Icons.close_rounded, size: 20)),
+        ]),
+      ),
+      bar,
+    ]);
   }
 
   @override
@@ -828,6 +999,11 @@ class MsgBubble extends StatelessWidget {
   final bool joinedBelow;
   final bool showAvatar;
   final bool showName;
+  final String myId;
+  final VoidCallback? onReply;
+  final VoidCallback? onMenu;
+  final VoidCallback? onLike;
+  final void Function(String emoji)? onReact;
   const MsgBubble({
     super.key,
     required this.m,
@@ -836,6 +1012,11 @@ class MsgBubble extends StatelessWidget {
     required this.joinedBelow,
     required this.showAvatar,
     required this.showName,
+    this.myId = '',
+    this.onReply,
+    this.onMenu,
+    this.onLike,
+    this.onReact,
   });
 
   Widget _content(BuildContext c, Color fg, {required bool bare}) {
@@ -931,7 +1112,9 @@ class MsgBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if ('${m['kind']}' == 'call') return _callLine(context);
     final kind = '${m['kind']}';
-    final bareMedia = (kind == 'image' && '${m['body'] ?? ''}'.isEmpty) || kind == 'video';
+    final reply = m['reply'] is Map ? Map<String, dynamic>.from(m['reply'] as Map) : null;
+    final gone = reply == null && m['reply_to_id'] != null;
+    final bareMedia = reply == null && !gone && ((kind == 'image' && '${m['body'] ?? ''}'.isEmpty) || kind == 'video');
     final fg = mine ? Colors.white : context.ink;
     const big = Radius.circular(22);
     const small = Radius.circular(6);
@@ -952,9 +1135,18 @@ class MsgBubble extends StatelessWidget {
                 gradient: mine ? _mineGradient : null,
                 borderRadius: radius,
               ),
-        child: ClipRRect(borderRadius: radius, child: _content(context, fg, bare: bareMedia)),
+        child: ClipRRect(
+          borderRadius: radius,
+          child: reply == null && !gone
+              ? _content(context, fg, bare: bareMedia)
+              : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+                  _quote(context, reply, fg),
+                  _content(context, fg, bare: false),
+                ]),
+        ),
       ),
     );
+    final reactions = (m['reactions'] is List ? m['reactions'] as List : []).whereType<Map>().toList();
     final row = Row(
       mainAxisAlignment: mine ? MainAxisAlignment.end : MainAxisAlignment.start,
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -983,9 +1175,79 @@ class MsgBubble extends StatelessWidget {
             child: Text('${m['name'] ?? ''}',
                 style: TextStyle(fontWeight: FontWeight.w700, fontSize: 11.5, color: context.muted)),
           ),
-        row,
+        _SwipeToReply(
+          mine: mine,
+          onReply: onReply,
+          child: GestureDetector(
+            behavior: HitTestBehavior.deferToChild,
+            onLongPress: onMenu,
+            onDoubleTap: onLike,
+            child: row,
+          ),
+        ),
+        if (reactions.isNotEmpty)
+          Padding(
+            padding: EdgeInsets.only(left: mine ? 0 : 44, right: mine ? 10 : 0),
+            child: Transform.translate(offset: const Offset(0, -7), child: _chips(context, reactions)),
+          ),
       ]),
     );
+  }
+
+  /// The quoted message at the top of a reply.
+  Widget _quote(BuildContext context, Map<String, dynamic>? reply, Color fg) {
+    final accent = mine ? Colors.white : const Color(0xFF7B61FF);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(6, 6, 6, 0),
+      padding: const EdgeInsets.fromLTRB(10, 6, 12, 6),
+      decoration: BoxDecoration(
+        color: (mine ? Colors.black : context.ink).withAlpha(mine ? 40 : 18),
+        borderRadius: BorderRadius.circular(14),
+        border: Border(left: BorderSide(color: accent, width: 3)),
+      ),
+      child: reply == null
+          ? Text('Original message unavailable',
+              style: TextStyle(color: fg.withAlpha(170), fontSize: 12.5, fontStyle: FontStyle.italic))
+          : Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min, children: [
+              Text('${'${reply['user_id']}' == myId ? 'You' : reply['name']}',
+                  style: TextStyle(color: accent, fontWeight: FontWeight.w800, fontSize: 12)),
+              Text(previewOf(reply),
+                  maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: fg.withAlpha(200), fontSize: 13)),
+            ]),
+    );
+  }
+
+  /// Emoji under the bubble, grouped with a count; yours is outlined, tap to take it back.
+  Widget _chips(BuildContext context, List<Map> reactions) {
+    final groups = <String, int>{};
+    final mineSet = <String>{};
+    for (final r in reactions) {
+      final e = '${r['emoji']}';
+      groups[e] = (groups[e] ?? 0) + 1;
+      if ('${r['user_id']}' == myId) mineSet.add(e);
+    }
+    return Wrap(spacing: 4, children: [
+      for (final g in groups.entries)
+        GestureDetector(
+          onTap: () => onReact?.call(g.key),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+            decoration: BoxDecoration(
+              color: context.cardBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: mineSet.contains(g.key) ? const Color(0xFF7B61FF) : context.muted.withAlpha(60), width: mineSet.contains(g.key) ? 1.5 : 1),
+              boxShadow: const [BoxShadow(color: Color(0x22000000), blurRadius: 3, offset: Offset(0, 1))],
+            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(g.key, style: const TextStyle(fontSize: 14)),
+              if (g.value > 1) ...[
+                const SizedBox(width: 3),
+                Text('${g.value}', style: TextStyle(fontSize: 11.5, color: context.muted, fontWeight: FontWeight.w700)),
+              ],
+            ]),
+          ),
+        ),
+    ]);
   }
 }
 
@@ -1083,4 +1345,70 @@ class _PhotoPage extends StatelessWidget {
         appBar: AppBar(backgroundColor: Colors.black, foregroundColor: Colors.white, elevation: 0),
         body: Center(child: InteractiveViewer(child: Image.network(url))),
       );
+}
+
+/// Drag a message sideways to reply to it (like WhatsApp and Instagram).
+class _SwipeToReply extends StatefulWidget {
+  final Widget child;
+  final bool mine;
+  final VoidCallback? onReply;
+  const _SwipeToReply({required this.child, required this.mine, this.onReply});
+  @override
+  State<_SwipeToReply> createState() => _SwipeToReplyState();
+}
+
+class _SwipeToReplyState extends State<_SwipeToReply> {
+  double _dx = 0;
+  bool _drag = false;
+  bool _fired = false;
+  static const _max = 64.0;
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.onReply == null) return widget.child;
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onHorizontalDragStart: (_) => setState(() {
+        _drag = true;
+        _fired = false;
+      }),
+      onHorizontalDragUpdate: (d) {
+        // swipe toward the middle of the screen: right for their messages, left for mine
+        final v = widget.mine ? -d.delta.dx : d.delta.dx;
+        final next = (_dx + v).clamp(0.0, _max);
+        if (next >= _max * 0.85 && !_fired) {
+          _fired = true;
+          HapticFeedback.selectionClick();
+        }
+        setState(() => _dx = next);
+      },
+      onHorizontalDragEnd: (_) {
+        final go = _dx >= _max * 0.85;
+        setState(() {
+          _drag = false;
+          _dx = 0;
+        });
+        if (go) widget.onReply!();
+      },
+      onHorizontalDragCancel: () => setState(() {
+        _drag = false;
+        _dx = 0;
+      }),
+      child: Stack(alignment: widget.mine ? Alignment.centerRight : Alignment.centerLeft, children: [
+        Opacity(
+          opacity: (_dx / _max).clamp(0.0, 1.0),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Icon(Icons.reply_rounded, color: context.muted, size: 22),
+          ),
+        ),
+        AnimatedContainer(
+          duration: _drag ? Duration.zero : const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+          transform: Matrix4.translationValues(widget.mine ? -_dx : _dx, 0, 0),
+          child: widget.child,
+        ),
+      ]),
+    );
+  }
 }
