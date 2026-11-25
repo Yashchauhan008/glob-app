@@ -4,6 +4,7 @@ import 'api.dart';
 import 'call_ui.dart';
 import 'chat_service.dart';
 import 'notify.dart';
+import 'widget_sync.dart';
 
 /// Firebase settings come in at build time (GitHub secrets). Without them, push is simply off and
 /// everything else (live chat, in-app notifications) still works.
@@ -35,6 +36,11 @@ Future<void> firebaseBackgroundHandler(RemoteMessage m) async {
   } else {
     await Notify.I.showPush(m.data);
   }
+  // the widgets on the home screen should show the new message too
+  try {
+    await Api.init();
+    await WidgetSync.refresh(only: {'unread', 'quickcall', 'call'});
+  } catch (_) {}
 }
 
 class Push {

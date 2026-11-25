@@ -1,0 +1,67 @@
+        <receiver android:name=".UnreadWidget" android:label="@string/gw_label_unread" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_unread" />
+        </receiver>
+        <receiver android:name=".TasksWidget" android:label="@string/gw_label_tasks" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_tasks" />
+        </receiver>
+        <receiver android:name=".ActionsWidget" android:label="@string/gw_label_actions" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_actions" />
+        </receiver>
+        <receiver android:name=".QuickCallWidget" android:label="@string/gw_label_quickcall" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_quickcall" />
+        </receiver>
+        <receiver android:name=".NextUpWidget" android:label="@string/gw_label_nextup" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_nextup" />
+        </receiver>
+        <receiver android:name=".CallWidget" android:label="@string/gw_label_call" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_call" />
+        </receiver>
+        <receiver android:name=".PulseWidget" android:label="@string/gw_label_pulse" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_pulse" />
+        </receiver>
+        <receiver android:name=".IdeasWidget" android:label="@string/gw_label_ideas" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_ideas" />
+        </receiver>
+        <receiver android:name=".OnlineWidget" android:label="@string/gw_label_online" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_online" />
+        </receiver>
+        <receiver android:name=".CrmWidget" android:label="@string/gw_label_crm" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_crm" />
+        </receiver>
+        <receiver android:name=".ProductsWidget" android:label="@string/gw_label_products" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/gw_info_products" />
+        </receiver>
+        <receiver android:name="es.antonborri.home_widget.HomeWidgetBackgroundReceiver" android:exported="false" />

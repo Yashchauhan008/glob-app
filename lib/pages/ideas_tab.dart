@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
+import '../widget_sync.dart';
 import '../theme.dart';
 import 'common.dart';
 
@@ -61,6 +62,14 @@ class IdeasTab extends StatefulWidget {
 class _IdeasTabState extends State<IdeasTab> {
   final _key = GlobalKey<AsyncListState>();
   String _status = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (WidgetActions.take('new_idea') && mounted) _add();
+    });
+  }
 
   Future<void> _add() async {
     final r = await askFields(context, 'New idea', ['Title', 'Description']);

@@ -3,6 +3,8 @@ import 'api.dart';
 import 'chat_service.dart';
 import 'notify.dart';
 import 'push.dart';
+import 'widget_sync.dart';
+import 'package:home_widget/home_widget.dart';
 import 'nav.dart';
 import 'theme.dart';
 import 'pages/auth_page.dart';
@@ -15,9 +17,13 @@ Future<void> main() async {
   await ThemeController.load();
   await Push.bootstrap();
   try {
+    await HomeWidget.registerInteractivityCallback(widgetBackgroundCallback);
+  } catch (_) {}
+  try {
     await Notify.I.init();
   } catch (_) {}
   Api.onSignedOut = () {
+    WidgetSync.clear();
     ChatService.I.disconnect();
     navKey.currentState?.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const AuthPage()), (_) => false);

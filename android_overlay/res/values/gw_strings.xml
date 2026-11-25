@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="gw_label_unread">Glob · Messages</string>
+    <string name="gw_desc_unread">Who messaged you, with unread counts</string>
+    <string name="gw_label_tasks">Glob · Today\'s tasks</string>
+    <string name="gw_desc_tasks">Open tasks you can tick off</string>
+    <string name="gw_label_actions">Glob · Quick actions</string>
+    <string name="gw_desc_actions">New task, new idea, chat and call</string>
+    <string name="gw_label_quickcall">Glob · Quick call</string>
+    <string name="gw_desc_quickcall">One tap to call the people you talk to</string>
+    <string name="gw_label_nextup">Glob · Next up</string>
+    <string name="gw_desc_nextup">Your next events and follow-ups</string>
+    <string name="gw_label_call">Glob · Call in progress</string>
+    <string name="gw_desc_call">Join a group call that is happening</string>
+    <string name="gw_label_pulse">Glob · Team pulse</string>
+    <string name="gw_desc_pulse">Tasks done, open questions, feasibility</string>
+    <string name="gw_label_ideas">Glob · Ideas</string>
+    <string name="gw_desc_ideas">Latest ideas coloured by status</string>
+    <string name="gw_label_online">Glob · Who\'s online</string>
+    <string name="gw_desc_online">Teammates who are active right now</string>
+    <string name="gw_label_crm">Glob · CRM follow-ups</string>
+    <string name="gw_desc_crm">Leads to follow up today</string>
+    <string name="gw_label_products">Glob · Products</string>
+    <string name="gw_desc_products">Which products are up or down</string>
+</resources>

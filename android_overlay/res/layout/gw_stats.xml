@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/gw_root" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:background="@drawable/gw_bg" android:padding="14dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingBottom="4dp">
+        <TextView android:id="@+id/gw_title" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="1" android:ellipsize="end" android:textColor="@color/gw_text" android:textSize="15sp" android:textStyle="bold" />
+        <TextView android:id="@+id/gw_count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_muted" android:textSize="12sp" />
+    </LinearLayout>
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:paddingTop="6dp">
+        <FrameLayout android:id="@+id/t1" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/t1_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/gw_tile" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="10dp">
+                <TextView android:id="@+id/t1_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="11sp" />
+                <TextView android:id="@+id/t1_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="22sp" android:textStyle="bold" />
+                <ProgressBar android:id="@+id/t1_bar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:max="100" android:progress="0" android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
+        <FrameLayout android:id="@+id/t2" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/t2_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/gw_tile" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="10dp">
+                <TextView android:id="@+id/t2_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="11sp" />
+                <TextView android:id="@+id/t2_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="22sp" android:textStyle="bold" />
+                <ProgressBar android:id="@+id/t2_bar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:max="100" android:progress="0" android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
+        <FrameLayout android:id="@+id/t3" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:layout_marginEnd="6dp" android:visibility="gone">
+            <ImageView android:id="@+id/t3_bg" android:layout_width="match_parent" android:layout_height="match_parent" android:scaleType="fitXY" android:src="@drawable/gw_tile" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:padding="10dp">
+                <TextView android:id="@+id/t3_label" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="11sp" />
+                <TextView android:id="@+id/t3_value" android:layout_width="match_parent" android:layout_height="wrap_content" android:maxLines="1" android:textColor="@color/gw_dark" android:textSize="22sp" android:textStyle="bold" />
+                <ProgressBar android:id="@+id/t3_bar" style="?android:attr/progressBarStyleHorizontal" android:layout_width="match_parent" android:layout_height="6dp" android:max="100" android:progress="0" android:visibility="gone" />
+            </LinearLayout>
+        </FrameLayout>
+    </LinearLayout>
+    <TextView android:id="@+id/gw_empty" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="10dp" android:textColor="@color/gw_muted" android:textSize="13sp" android:visibility="gone" />
+</LinearLayout>

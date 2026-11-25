@@ -44,6 +44,25 @@ jobs:
           sed -i 's#</application>#<service android:name="de.julianassmann.flutter_background.IsolateHolderService" android:enabled="true" android:exported="false" android:foregroundServiceType="mediaProjection" />\n    </application>#' "$M"
           grep -n "INTERNET\|label\|launchMode\|IsolateHolderService" "$M"
 
+      # Home-screen widgets: native files live in android_overlay/ (made by tools/gen_widgets.py)
+      - name: Add home-screen widgets
+        run: |
+          set -e
+          PKGDIR=android/app/src/main/kotlin/pro/yashchauhan/glob_app
+          ls "$PKGDIR"
+          cp android_overlay/kotlin/*.kt "$PKGDIR/"
+          cp -R android_overlay/res/. android/app/src/main/res/
+          python3 - <<'PY'
+          p = 'android/app/src/main/AndroidManifest.xml'
+          s = open(p).read()
+          recv = open('android_overlay/manifest_receivers.xml').read()
+          s = s.replace('</application>', recv + '    </application>', 1)
+          # taps on widgets arrive as this action on the main activity
+          s = s.replace('</activity>', '    <intent-filter><action android:name="es.antonborri.home_widget.action.LAUNCH" /></intent-filter>\n        </activity>', 1)
+          open(p, 'w').write(s)
+          PY
+          grep -n "Widget\|home_widget" android/app/src/main/AndroidManifest.xml | head -20
+
       # flutter_local_notifications needs Java desugaring; the audio recorder needs minSdk 23+
       - name: Patch Gradle (desugaring, minSdk)
         run: |

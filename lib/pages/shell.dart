@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:home_widget/home_widget.dart';
 import '../api.dart';
 import '../call_service.dart';
 import '../nav.dart';
 import '../chat_service.dart';
 import '../notify.dart';
 import '../push.dart';
+import '../widget_sync.dart';
 import '../theme.dart';
 import 'auth_page.dart';
 import 'workspaces_page.dart';
@@ -45,6 +48,7 @@ class _ShellState extends State<Shell> {
   final _scaffold = GlobalKey<ScaffoldState>();
   final call = CallService.I;
   final chat = ChatService.I;
+  StreamSubscription<Uri?>? _widgetSub;
 
   List<_Dest> get _all => [
         _Dest('Overview', Icons.home_outlined, () => HomeTab(onGo: (i) => setState(() => _i = i))),
@@ -66,6 +70,9 @@ class _ShellState extends State<Shell> {
     NavIntent.notifier.addListener(_onIntent);
     chat.start();
     call.init();
+    WidgetSync.start();
+    HomeWidget.initiallyLaunchedFromHomeWidget().then(_onWidgetLink);
+    _widgetSub = HomeWidget.widgetClicked.listen(_onWidgetLink);
     Notify.I.init().then((_) => Notify.I.requestPermission());
     Push.register();
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -81,6 +88,7 @@ class _ShellState extends State<Shell> {
   void dispose() {
     call.removeListener(_r);
     chat.removeListener(_r);
+    _widgetSub?.cancel();
     NavIntent.notifier.removeListener(_onIntent);
     super.dispose();
   }
@@ -126,6 +134,122 @@ class _ShellState extends State<Shell> {
     }
   }
 
+  /// A tap on a home-screen widget: glob://chat/dm/<id>, glob://tasks, glob://new/task, glob://call/<id>/voice ...
+  Future<void> _onWidgetLink(Uri? u) async {
+    if (u == null || u.scheme != 'glob' || !mounted) return;
+    final seg = u.pathSegments;
+    final nav = Navigator.of(context);
+    int? tab;
+    switch (u.host) {
+      case 'home':
+        tab = 0;
+        break;
+      case 'ideas':
+        tab = 1;
+        break;
+      case 'tasks':
+        tab = 2;
+        break;
+      case 'leads':
+        tab = 3;
+        break;
+      case 'products':
+        tab = 4;
+        break;
+      case 'calendar':
+        tab = 5;
+        break;
+      case 'chat':
+        if (seg.length == 2 && seg[0] == 'dm') {
+          if (chat.inbox == null) await chat.loadInbox();
+          final peer = chat.personById(seg[1]);
+          if (!mounted) return;
+          setState(() => _i = _kChat);
+          if (peer != null) nav.push(MaterialPageRoute(builder: (_) => ConversationPage(peer: peer)));
+        } else if (seg.length == 1 && seg[0] == 'workspace') {
+          setState(() => _i = _kChat);
+          nav.push(MaterialPageRoute(builder: (_) => const ConversationPage()));
+        } else {
+          tab = _kChat;
+        }
+        break;
+      case 'new':
+        if (seg.isNotEmpty && seg[0] == 'task') {
+          WidgetActions.pending = 'new_task';
+          tab = 2;
+        } else {
+          WidgetActions.pending = 'new_idea';
+          tab = 1;
+        }
+        break;
+      case 'call':
+        if (seg.isEmpty) {
+          _callPicker();
+        } else if (seg[0] == 'join' && seg.length == 2) {
+          await call.loadOpen();
+          final match = call.open.where((c) => '${c['id']}' == seg[1]).toList();
+          final err = match.isEmpty ? 'That call has ended' : await call.joinGroup(match.first, video: '${match.first['kind']}' == 'video');
+          if (err != null && mounted) toast(context, err);
+        } else if (seg.length == 2) {
+          if (chat.inbox == null) await chat.loadInbox();
+          final peer = chat.personById(seg[0]);
+          final err = await call.start(scope: 'dm', kind: seg[1] == 'video' ? 'video' : 'voice', to: seg[0], toName: peer == null ? null : '${peer['name']}');
+          if (err != null && mounted) toast(context, err);
+        }
+        break;
+    }
+    if (tab != null && mounted) setState(() => _i = tab!);
+  }
+
+  /// "Who do you want to call?"
+  void _callPicker() {
+    final members = chat.members;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (c) => Padding(
+        padding: const EdgeInsets.all(16),
+        child: SizedBox(
+          height: MediaQuery.of(c).size.height * 0.55,
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Who do you want to call?', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Expanded(
+              child: members.isEmpty
+                  ? const Center(child: Text('No one to call yet.'))
+                  : ListView(children: [
+                      for (final m in members)
+                        ListTile(
+                          tileColor: Colors.transparent,
+                          leading: Avatar(id: '${m['id']}', name: '${m['name']}', url: m['avatar_url'] as String?, size: 42, online: chat.online.contains('${m['id']}')),
+                          title: Text('${m['name']}'),
+                          trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                            IconButton(
+                              icon: const Icon(Icons.call_rounded),
+                              onPressed: () async {
+                                Navigator.pop(c);
+                                final err = await call.start(scope: 'dm', kind: 'voice', to: '${m['id']}', toName: '${m['name']}');
+                                if (err != null && mounted) toast(context, err);
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.videocam_rounded),
+                              onPressed: () async {
+                                Navigator.pop(c);
+                                final err = await call.start(scope: 'dm', kind: 'video', to: '${m['id']}', toName: '${m['name']}');
+                                if (err != null && mounted) toast(context, err);
+                              },
+                            ),
+                          ]),
+                        ),
+                    ]),
+            ),
+          ]),
+        ),
+      ),
+    );
+  }
+
   Future<void> _menu(String v) async {
     final nav = Navigator.of(context);
     await call.hangUp();
@@ -135,6 +259,7 @@ class _ShellState extends State<Shell> {
       nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const WorkspacesPage()), (_) => false);
     } else {
       await Push.unregister();
+      await WidgetSync.clear();
       chat.disconnect();
       await Api.signOut();
       nav.pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const AuthPage()), (_) => false);

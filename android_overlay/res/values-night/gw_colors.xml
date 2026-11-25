@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="gw_card">#FF1F1F24</color>
+    <color name="gw_text">#FFF2F2F5</color>
+    <color name="gw_muted">#FF9A9AA3</color>
+    <color name="gw_btn">#FF34343A</color>
+    <color name="gw_dark">#FF16161A</color>
+</resources>

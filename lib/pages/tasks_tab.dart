@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../api.dart';
+import '../widget_sync.dart';
 import 'common.dart';
 
 class TasksTab extends StatefulWidget {
@@ -11,6 +12,14 @@ class TasksTab extends StatefulWidget {
 class _TasksTabState extends State<TasksTab> {
   final _key = GlobalKey<AsyncListState>();
   String _filter = 'open';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (WidgetActions.take('new_task') && mounted) _add();
+    });
+  }
 
   Future<void> _add() async {
     final r = await askFields(context, 'New task', ['Title', 'Due date (YYYY-MM-DD, optional)']);

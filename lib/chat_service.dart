@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:socket_io_client/socket_io_client.dart' as sio;
 import 'api.dart';
 import 'notify.dart';
+import 'widget_sync.dart';
 
 Map<String, dynamic> normMap(dynamic d) {
   try {
@@ -133,15 +134,18 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       if (d is List) {
         online = d.whereType<Map>().map((e) => '${e['user_id']}').toSet();
         notifyListeners();
+        WidgetSync.soon(only: {'online'});
       }
     });
     s.on('dm:message', (d) {
       _ev.add({'t': 'dm', 'm': normMap(d)});
       _soon();
+      WidgetSync.soon(only: {'unread', 'quickcall'});
     });
     s.on('chat:message', (d) {
       _ev.add({'t': 'chat', 'm': normMap(d)});
       _soon();
+      WidgetSync.soon(only: {'unread'});
     });
     s.on('dm:status', (d) {
       _ev.add({'t': 'status', 'm': normMap(d)});
@@ -151,7 +155,10 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
     s.on('chat:typing', (d) => _ev.add({'t': 'chattyping', 'm': normMap(d)}));
     s.on('call:incoming', (d) => _ev.add({'t': 'call_incoming', 'm': normMap(d)}));
     s.on('call:handled', (d) => _ev.add({'t': 'call_handled', 'm': normMap(d)}));
-    s.on('call:state', (d) => _ev.add({'t': 'call_state', 'm': normMap(d)}));
+    s.on('call:state', (d) {
+      _ev.add({'t': 'call_state', 'm': normMap(d)});
+      WidgetSync.soon(only: {'call'});
+    });
     s.on('notification', (d) {
       final n = normMap(d);
       loadNotifUnread();
@@ -266,6 +273,7 @@ class ChatService extends ChangeNotifier with WidgetsBindingObserver {
       if (!connected) _s!.connect();
       loadInbox();
       loadNotifUnread();
+      WidgetSync.soon();
     }
   }
 
